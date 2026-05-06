@@ -28,6 +28,31 @@ jobs:
         run: cargo test -p dubina-runtime
       - name: cargo test (файловая система ДубФС)
         run: cargo test -p dubina-fs
+      - name: Резолвер имён — smoke-тест на демо-программе
+        run: |
+          cat > /tmp/демо.дуб <<'EOF'
+          помощник(а)(р):
+              р = а + 1
+          ;
+
+          main()(результат):
+              х = помощник(2)
+              результат = х
+          ;
+          EOF
+          cargo run -q -p dubina-compiler -- проанализировать /tmp/демо.дуб \
+            | tee /tmp/резолв.log
+          grep -q "OK: имена резолвятся" /tmp/резолв.log
+          grep -q "верхнеуровневых функций: 2" /tmp/резолв.log
+          # Негативный сценарий: использование неизвестного имени должно дать ошибку.
+          cat > /tmp/плохо.дуб <<'EOF'
+          main()(р):
+              р = таинственное
+          ;
+          EOF
+          ! cargo run -q -p dubina-compiler -- проанализировать /tmp/плохо.дуб \
+            2> /tmp/резолв-err.log
+          grep -q "неизвестное имя" /tmp/резолв-err.log
       - name: cargo build (ДубФС, x86_64-unknown-none)
         run: |
           rustup target add x86_64-unknown-none
