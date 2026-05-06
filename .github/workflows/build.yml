@@ -53,6 +53,30 @@ jobs:
           ! cargo run -q -p dubina-compiler -- проанализировать /tmp/плохо.дуб \
             2> /tmp/резолв-err.log
           grep -q "неизвестное имя" /tmp/резолв-err.log
+      - name: Проверка типов — smoke-тест
+        run: |
+          cat > /tmp/типы-ок.дуб <<'EOF'
+          удвоить(Цел а)(Цел р):
+              р = а + а
+          ;
+
+          main()(Цел р):
+              х = удвоить(21)
+              р = х
+          ;
+          EOF
+          cargo run -q -p dubina-compiler -- типизировать /tmp/типы-ок.дуб \
+            | tee /tmp/тип.log
+          grep -q "OK: типы согласованы" /tmp/тип.log
+          # Негатив: «строка + число» — ошибка.
+          cat > /tmp/типы-плохо.дуб <<'EOF'
+          main()(Цел р):
+              р = "эй" + 1
+          ;
+          EOF
+          ! cargo run -q -p dubina-compiler -- типизировать /tmp/типы-плохо.дуб \
+            2> /tmp/тип-err.log
+          grep -q "числовой левый операнд" /tmp/тип-err.log
       - name: cargo build (ДубФС, x86_64-unknown-none)
         run: |
           rustup target add x86_64-unknown-none
