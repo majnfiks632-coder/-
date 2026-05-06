@@ -33,6 +33,10 @@ name = "dubina-compiler"
 version = "0.1.0"
 
 [[package]]
+name = "dubina-fs"
+version = "0.1.0"
+
+[[package]]
 name = "dubina-kernel"
 version = "0.1.0"
 dependencies = [

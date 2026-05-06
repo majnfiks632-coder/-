@@ -26,6 +26,16 @@ jobs:
         run: cargo test -p dubina-compiler
       - name: cargo test (рантайм)
         run: cargo test -p dubina-runtime
+      - name: cargo test (файловая система ДубФС)
+        run: cargo test -p dubina-fs
+      - name: cargo build (ДубФС, x86_64-unknown-none)
+        run: |
+          rustup target add x86_64-unknown-none
+          cargo build -p dubina-fs --target x86_64-unknown-none
+      - name: cargo build (ДубФС, aarch64-unknown-none)
+        run: |
+          rustup target add aarch64-unknown-none
+          cargo build -p dubina-fs --target aarch64-unknown-none
 
   ядро_x86_64:
     name: Ядро x86_64 + загрузка в QEMU (свой загрузчик)
