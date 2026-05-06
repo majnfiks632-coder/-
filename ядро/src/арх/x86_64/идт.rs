@@ -244,7 +244,7 @@ pub unsafe fn инициализировать() {
 
     let указатель = УказательИдт {
         предел: (size_of::<[ЗаписьИдт; ВСЕГО_ВЕКТОРОВ]>() - 1) as u16,
-        база: unsafe { &raw const ИДТ as *const _ as u64 },
+        база: &raw const ИДТ as *const _ as u64,
     };
 
     unsafe {
