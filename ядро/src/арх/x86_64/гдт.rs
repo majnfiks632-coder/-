@@ -115,7 +115,7 @@ pub unsafe fn инициализировать() {
     let данные_польз: u64 = 0x00CF_F200_0000_FFFF; // ring 3 data
 
     // Дескриптор TSS — занимает 2 слота по 8 байт.
-    let tss_адрес = unsafe { &raw const TSS as *const ТссЗапись as u64 };
+    let tss_адрес = &raw const TSS as *const ТссЗапись as u64;
     let tss_предел = (size_of::<ТссЗапись>() - 1) as u64;
 
     // Низшие 8 байт дескриптора TSS:
@@ -144,7 +144,7 @@ pub unsafe fn инициализировать() {
 
     let указатель = ГдтУказатель {
         предел: (size_of::<[u64; ВСЕГО_ЗАПИСЕЙ]>() - 1) as u16,
-        база: unsafe { &raw const ГДТ as *const _ as u64 },
+        база: &raw const ГДТ as *const _ as u64,
     };
 
     unsafe {
