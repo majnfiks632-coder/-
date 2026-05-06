@@ -1,0 +1,17 @@
+target/
+сборка/
+build/
+*.o
+*.bin
+*.elf
+*.iso
+*.img
+*.efi
+*.lock~
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+ovmf/
