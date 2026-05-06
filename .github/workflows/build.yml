@@ -72,7 +72,34 @@ jobs:
           grep -q "ДУБИНА" /tmp/serial-own.log
           grep -q "Архитектура: x86_64" /tmp/serial-own.log
           grep -q "собственный загрузчик ДубинаОС" /tmp/serial-own.log
-          echo "ОК: свой загрузчик и ядро работают"
+          # Этап 8: оболочка ядра должна стартовать и распечатать приглашение.
+          grep -q "ДубинаОС оболочка (этап 8)" /tmp/serial-own.log
+          grep -q "дубина>" /tmp/serial-own.log
+          echo "ОК: свой загрузчик и ядро работают, оболочка стартовала"
+
+      - name: Установка socat для тестов оболочки
+        run: sudo apt-get install -y --no-install-recommends socat
+      - name: Проверка команд оболочки (help / version / mem) через PS/2
+        run: |
+          rm -f /tmp/serial-shell.log /tmp/qmp.sock
+          (timeout 25 qemu-system-x86_64 \
+            -m 256M -drive format=raw,file=сборка/dubina.img \
+            -display none -serial file:/tmp/serial-shell.log \
+            -monitor unix:/tmp/qmp.sock,server,nowait \
+            -no-reboot -no-shutdown -boot c &)
+          sleep 5
+          send() { echo "sendkey $1" | timeout 1 socat - UNIX-CONNECT:/tmp/qmp.sock >/dev/null 2>&1; sleep 0.15; }
+          for k in h e l p ret v e r s i o n ret m e m ret; do send $k; done
+          sleep 4
+          pkill -TERM qemu-system-x86_64 2>/dev/null || true
+          sleep 1
+          echo "=== Серийный вывод (оболочка) ==="
+          cat /tmp/serial-shell.log
+          echo "================================="
+          grep -q "Встроенные команды" /tmp/serial-shell.log
+          grep -q "ДубинаОС, ядро v0.1" /tmp/serial-shell.log
+          grep -q "Физическая память: всего" /tmp/serial-shell.log
+          echo "ОК: оболочка отвечает на help / version / mem"
 
       - name: Альтернативный путь — GRUB Multiboot2 ISO
         run: bash скрипты/собрать_iso.sh release
