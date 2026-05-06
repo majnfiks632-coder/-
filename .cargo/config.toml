@@ -1,0 +1,25 @@
+# Глобальные настройки Cargo для проекта ДубинаОС.
+#
+# Заметка: умолчательную цель здесь НЕ ставим, потому что в воркспейсе сосуществуют
+# не-стандартные цели (ядро для bare-metal) и хостовые цели (компилятор «Дубины»).
+# Цель указывается явно при сборке через `--target` или в Makefile.
+
+[target.x86_64-unknown-none]
+rustflags = [
+    "-C", "code-model=kernel",
+    "-C", "relocation-model=static",
+    "-C", "panic=abort",
+    "-C", "link-arg=-Tядро/связь_x86_64.ld",
+    "-C", "link-arg=-nostdlib",
+    "-C", "link-arg=-static",
+    "-C", "link-arg=-z",
+    "-C", "link-arg=max-page-size=0x1000",
+]
+
+[target.aarch64-unknown-none]
+rustflags = [
+    "-C", "panic=abort",
+    "-C", "link-arg=-Tядро/связь_aarch64.ld",
+    "-C", "link-arg=-nostdlib",
+    "-C", "link-arg=-static",
+]

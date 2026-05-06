@@ -1,0 +1,11 @@
+[package]
+name = "dubina-runtime"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Рантайм-библиотека для скомпилированных программ на «Дубине»"
+
+[lib]
+name = "dubina_runtime"
+path = "src/lib.rs"

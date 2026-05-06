@@ -1,0 +1,18 @@
+[package]
+name = "dubina-kernel"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Микроядро ДубинаОС"
+
+[[bin]]
+name = "yadro"
+path = "src/главный.rs"
+
+[dependencies]
+spin = { version = "0.9", default-features = false, features = ["spin_mutex"] }
+
+[features]
+default = []
+test_run = []

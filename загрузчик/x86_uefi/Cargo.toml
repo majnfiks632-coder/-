@@ -1,0 +1,15 @@
+[package]
+name = "dubina-bootloader-uefi"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "UEFI-загрузчик ДубинаОС"
+
+[[bin]]
+name = "BOOTX64"
+path = "src/main.rs"
+
+[dependencies]
+uefi = { version = "0.30", default-features = false, features = ["alloc", "logger", "global_allocator", "panic_handler"] }
+log = "0.4"

@@ -1,0 +1,111 @@
+# ДубинаОС — CI: сборка ядра, ISO, запуск в QEMU, тесты компилятора и рантайма.
+# Лицензия: GPL-3.0-or-later
+
+name: Сборка и тесты ДубинаОС
+
+on:
+  push:
+    branches: [main, "devin/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  тесты:
+    name: Юнит-тесты (компилятор + рантайм)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Установка Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rust-src, llvm-tools-preview
+      - name: Кэш cargo
+        uses: Swatinem/rust-cache@v2
+      - name: cargo test (компилятор)
+        run: cargo test -p dubina-compiler
+      - name: cargo test (рантайм)
+        run: cargo test -p dubina-runtime
+
+  ядро_x86_64:
+    name: Ядро x86_64 + загрузка в QEMU (свой загрузчик)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Установка системных пакетов
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qemu-system-x86 nasm binutils \
+            grub-pc-bin grub-common xorriso mtools
+      - name: Установка Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rust-src, llvm-tools-preview
+          targets: x86_64-unknown-none
+      - name: Кэш cargo
+        uses: Swatinem/rust-cache@v2
+      - name: Сборка собственного образа (MBR + Stage2 + ядро)
+        run: bash скрипты/собрать_образ.sh release
+      - name: Тест загрузки собственного образа в QEMU
+        run: |
+          timeout 20 qemu-system-x86_64 \
+            -m 256M -drive format=raw,file=сборка/dubina.img \
+            -display none -serial file:/tmp/serial-own.log \
+            -no-reboot -no-shutdown -boot c \
+            || true
+          echo "=== Серийный вывод (свой загрузчик) ==="
+          cat /tmp/serial-own.log
+          echo "======================================="
+          grep -q "DubinaOS MBR" /tmp/serial-own.log
+          grep -q "Stage2: kernel loaded" /tmp/serial-own.log
+          grep -q "ДУБИНА" /tmp/serial-own.log
+          grep -q "Архитектура: x86_64" /tmp/serial-own.log
+          grep -q "собственный загрузчик ДубинаОС" /tmp/serial-own.log
+          echo "ОК: свой загрузчик и ядро работают"
+
+      - name: Альтернативный путь — GRUB Multiboot2 ISO
+        run: bash скрипты/собрать_iso.sh release
+      - name: Тест загрузки GRUB-ISO в QEMU (совместимость)
+        run: |
+          timeout 20 qemu-system-x86_64 \
+            -m 256M -cdrom сборка/dubina.iso -nographic \
+            -serial file:/tmp/serial-grub.log -no-reboot -no-shutdown -boot d \
+            || true
+          echo "=== Серийный вывод (GRUB) ==="
+          cat /tmp/serial-grub.log
+          echo "============================="
+          grep -q "ДУБИНА" /tmp/serial-grub.log
+          grep -q "Multiboot2" /tmp/serial-grub.log
+          echo "ОК: GRUB-ISO тоже грузит ядро (для совместимости)"
+
+  ядро_aarch64:
+    name: Ядро aarch64 + загрузка в QEMU
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Установка QEMU aarch64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-arm
+      - name: Установка Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rust-src, llvm-tools-preview
+          targets: aarch64-unknown-none
+      - name: Кэш cargo
+        uses: Swatinem/rust-cache@v2
+      - name: Сборка ядра aarch64
+        run: cargo build --target aarch64-unknown-none -p dubina-kernel --release
+      - name: Тест загрузки в QEMU
+        run: |
+          timeout 15 qemu-system-aarch64 \
+            -machine virt -cpu cortex-a72 -m 256M -nographic \
+            -kernel target/aarch64-unknown-none/release/yadro \
+            -serial file:/tmp/serial-arm.log || true
+          echo "=== Серийный вывод ==="
+          cat /tmp/serial-arm.log
+          echo "===================="
+          grep -q "ДУБИНА" /tmp/serial-arm.log
+          grep -q "Архитектура: aarch64" /tmp/serial-arm.log
+          echo "ОК: ядро aarch64 успешно загрузилось"
