@@ -1,0 +1,235 @@
+# ДубинаОС — CI: сборка ядра, ISO, запуск в QEMU, тесты компилятора и рантайма.
+# Лицензия: GPL-3.0-or-later
+
+name: Сборка и тесты ДубинаОС
+
+on:
+  push:
+    branches: [main, "devin/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: Юнит-тесты (компилятор + рантайм)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Установка Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          components: rust-src, llvm-tools-preview
+      - name: Кэш cargo
+        uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+      - name: cargo test (компилятор)
+        run: cargo test -p dubina-compiler
+      - name: cargo test (рантайм)
+        run: cargo test -p dubina-runtime
+      - name: cargo test (файловая система ДубФС)
+        run: cargo test -p dubina-fs
+      - name: Резолвер имён — smoke-тест на демо-программе
+        run: |
+          cat > /tmp/демо.дуб <<'EOF'
+          помощник(а)(р):
+              р = а + 1
+          ;
+
+          main()(результат):
+              х = помощник(2)
+              результат = х
+          ;
+          EOF
+          cargo run -q -p dubina-compiler -- проанализировать /tmp/демо.дуб \
+            | tee /tmp/резолв.log
+          grep -q "OK: имена резолвятся" /tmp/резолв.log
+          grep -q "верхнеуровневых функций: 2" /tmp/резолв.log
+          # Негативный сценарий: использование неизвестного имени должно дать ошибку.
+          cat > /tmp/плохо.дуб <<'EOF'
+          main()(р):
+              р = таинственное
+          ;
+          EOF
+          ! cargo run -q -p dubina-compiler -- проанализировать /tmp/плохо.дуб \
+            2> /tmp/резолв-err.log
+          grep -q "неизвестное имя" /tmp/резолв-err.log
+      - name: Проверка типов — smoke-тест
+        run: |
+          cat > /tmp/типы-ок.дуб <<'EOF'
+          удвоить(Цел а)(Цел р):
+              р = а + а
+          ;
+
+          main()(Цел р):
+              х = удвоить(21)
+              р = х
+          ;
+          EOF
+          cargo run -q -p dubina-compiler -- типизировать /tmp/типы-ок.дуб \
+            | tee /tmp/тип.log
+          grep -q "OK: типы согласованы" /tmp/тип.log
+          # Негатив: «строка + число» — ошибка.
+          cat > /tmp/типы-плохо.дуб <<'EOF'
+          main()(Цел р):
+              р = "эй" + 1
+          ;
+          EOF
+          ! cargo run -q -p dubina-compiler -- типизировать /tmp/типы-плохо.дуб \
+            2> /tmp/тип-err.log
+          grep -q "числовой левый операнд" /tmp/тип-err.log
+      - name: cargo build (ДубФС, x86_64-unknown-none)
+        run: |
+          rustup target add x86_64-unknown-none
+          cargo build -p dubina-fs --target x86_64-unknown-none
+      - name: cargo build (ДубФС, aarch64-unknown-none)
+        run: |
+          rustup target add aarch64-unknown-none
+          cargo build -p dubina-fs --target aarch64-unknown-none
+
+  kernel_x86_64:
+    name: Ядро x86_64 + загрузка в QEMU (свой загрузчик)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Установка системных пакетов
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qemu-system-x86 nasm binutils \
+            grub-pc-bin grub-common xorriso mtools
+      - name: Установка Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          components: rust-src, llvm-tools-preview
+          targets: x86_64-unknown-none
+      - name: Кэш cargo
+        uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+      - name: Сборка собственного образа (MBR + Stage2 + ядро)
+        run: bash скрипты/собрать_образ.sh release
+      - name: Тест загрузки собственного образа в QEMU
+        run: |
+          timeout 20 qemu-system-x86_64 \
+            -m 256M -drive format=raw,file=сборка/dubina.img \
+            -display none -serial file:/tmp/serial-own.log \
+            -no-reboot -no-shutdown -boot c \
+            || true
+          echo "=== Серийный вывод (свой загрузчик) ==="
+          cat /tmp/serial-own.log
+          echo "======================================="
+          # Баннер ядра печатается как "Д У Б И Н А" (с пробелами), поэтому
+          # ищем по якорям "ДубинаОС" или "Версия 0.1.0".
+          for паттерн in \
+              "DubinaOS Stage1: zagruzka Stage2" \
+              "Stage2: yadro zagruzheno" \
+              "Версия 0.1.0" \
+              "Архитектура: x86_64" \
+              "собственный загрузчик ДубинаОС" \
+              "ДубинаОС оболочка (этап 8)" \
+              "ДубФС смонтирована" \
+              "дубина:"
+          do
+              if ! grep -qF "$паттерн" /tmp/serial-own.log; then
+                  echo "НЕ НАЙДЕНО в серийном выводе: $паттерн" >&2
+                  exit 1
+              fi
+          done
+          echo "ОК: свой загрузчик и ядро работают, оболочка стартовала"
+
+      - name: Установка socat для тестов оболочки
+        run: sudo apt-get install -y --no-install-recommends socat
+      - name: Проверка команд оболочки (help / version / mem / ls / cat / df) через PS/2
+        run: |
+          rm -f /tmp/serial-shell.log /tmp/qmp.sock
+          (timeout 35 qemu-system-x86_64 \
+            -m 256M -drive format=raw,file=сборка/dubina.img \
+            -display none -serial file:/tmp/serial-shell.log \
+            -monitor unix:/tmp/qmp.sock,server,nowait \
+            -no-reboot -no-shutdown -boot c &)
+          sleep 5
+          send() { echo "sendkey $1" | timeout 1 socat - UNIX-CONNECT:/tmp/qmp.sock >/dev/null 2>&1; sleep 0.15; }
+          # help, version, mem
+          for k in h e l p ret v e r s i o n ret m e m ret; do send $k; done
+          # ls / (показывает корневой каталог ДубФС)
+          for k in l s spc slash ret; do send $k; done
+          # cat /readme.txt (Латинский путь, можно набрать через sendkey)
+          for k in c a t spc slash r e a d m e dot t x t ret; do send $k; done
+          # df (статистика ДубФС)
+          for k in d f ret; do send $k; done
+          sleep 5
+          pkill -TERM qemu-system-x86_64 2>/dev/null || true
+          sleep 1
+          echo "=== Серийный вывод (оболочка) ==="
+          cat /tmp/serial-shell.log
+          echo "================================="
+          for паттерн in \
+              "Встроенные команды" \
+              "ДубинаОС, ядро v0.1" \
+              "Физическая память: всего" \
+              "ДубФС смонтирована" \
+              "DubinaOS in-RAM" \
+              "размер блока 4096"
+          do
+              if ! grep -qF "$паттерн" /tmp/serial-shell.log; then
+                  echo "НЕ НАЙДЕНО в серийном выводе оболочки: $паттерн" >&2
+                  exit 1
+              fi
+          done
+          echo "ОК: оболочка отвечает на help / version / mem / ls / cat / df"
+
+      - name: Альтернативный путь — GRUB Multiboot2 ISO
+        run: bash скрипты/собрать_iso.sh release
+      - name: Тест загрузки GRUB-ISO в QEMU (совместимость)
+        run: |
+          # GRUB-ISO в TCG (без KVM) грузится медленнее, чем собственный
+          # MBR-образ, поэтому даём 35 сек и проверяем только то, что
+          # действительно успевает напечатать ядро на этом отрезке —
+          # баннер версии и факт мультизагрузки. Полную цепочку оболочки
+          # уже проверяет шаг выше через свой загрузчик.
+          timeout 35 qemu-system-x86_64 \
+            -m 256M -cdrom сборка/dubina.iso -nographic \
+            -serial file:/tmp/serial-grub.log -no-reboot -no-shutdown -boot d \
+            || true
+          echo "=== Серийный вывод (GRUB) ==="
+          cat /tmp/serial-grub.log
+          echo "============================="
+          grep -qF "Версия 0.1.0" /tmp/serial-grub.log
+          grep -qF "Multiboot2" /tmp/serial-grub.log
+          echo "ОК: GRUB-ISO тоже грузит ядро (для совместимости)"
+
+  kernel_aarch64:
+    name: Ядро aarch64 + загрузка в QEMU
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Установка QEMU aarch64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-arm
+      - name: Установка Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          components: rust-src, llvm-tools-preview
+          targets: aarch64-unknown-none
+      - name: Кэш cargo
+        uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+      - name: Сборка ядра aarch64
+        run: cargo build --target aarch64-unknown-none -p dubina-kernel --release
+      - name: Тест загрузки в QEMU
+        run: |
+          # -net none отключает дефолтный virtio-net (в свежих QEMU это
+          # требует efi-virtio.rom, который не ставится вместе с qemu-system-arm
+          # в ubuntu-24.04 runner-image — ядро сеть не использует).
+          timeout 15 qemu-system-aarch64 \
+            -machine virt -cpu cortex-a72 -m 256M -nographic \
+            -kernel target/aarch64-unknown-none/release/yadro \
+            -serial file:/tmp/serial-arm.log -net none || true
+          echo "=== Серийный вывод ==="
+          cat /tmp/serial-arm.log
+          echo "===================="
+          for паттерн in "ДубинаОС" "Архитектура: aarch64"; do
+              if ! grep -qF "$паттерн" /tmp/serial-arm.log; then
+                  echo "НЕ НАЙДЕНО: $паттерн" >&2
+                  exit 1
+              fi
+          done
+          echo "ОК: ядро aarch64 успешно загрузилось"

@@ -1,0 +1,20 @@
+[package]
+name = "dubina-fs"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Файловая система ДубФС: журнал, BLAKE3-контрольные суммы, B+ деревья каталогов"
+
+[lib]
+name = "dubina_fs"
+path = "src/lib.rs"
+
+[dependencies]
+
+[dev-dependencies]
+
+# Крейт no_std + alloc, чтобы могло жить и в ядре. Тесты прогоняются на
+# хосте через cargo test (там std подтягивается автоматически).
+[features]
+default = []

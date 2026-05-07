@@ -1,0 +1,34 @@
+[workspace]
+resolver = "2"
+members = [
+    "ядро",
+    "загрузчик/x86_uefi",
+    "язык_дубина/компилятор",
+    "язык_дубина/рантайм",
+    "файлсистема/дубфс",
+    "службы/драйверы",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Команда ДубинаОС"]
+license = "GPL-3.0-or-later"
+repository = "https://github.com/lohovicmiraz-gif/-"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1
+opt-level = "s"
+
+[profile.dev.package."*"]
+opt-level = 1
+
+# Примечание о именах
+# -------------------
+# Имена пакетов в Cargo обязаны быть ASCII (`[a-zA-Z0-9_-]`), поэтому
+# `dubina-kernel` вместо «ядро» как имя пакета. Сами файлы и код — на русском.
