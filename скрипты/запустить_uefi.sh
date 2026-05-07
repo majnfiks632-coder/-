@@ -89,13 +89,24 @@ case "$MODE" in
         QEMU_OPTS+=(-serial stdio)
         ;;
     test)
-        QEMU_OPTS+=(-nographic -serial mon:stdio)
-        echo "Запуск в тестовом режиме (20 сек таймаут)..."
+        # В --test пишем serial в файл (а не mon:stdio), чтобы это работало
+        # в CI/без tty. С mon:stdio при stdin=/dev/null OVMF не печатает
+        # ни байта в serial, и тест выглядит как «ничего не загрузилось».
+        TEST_LOG="${UEFI_TEST_LOG:-сборка/serial-uefi-test.log}"
+        rm -f "$TEST_LOG"
+        QEMU_OPTS+=(-nographic -serial "file:$TEST_LOG")
+        # Свежие OVMF_VARS на каждый --test, чтобы не унаследовать остатки.
+        if [[ -n "$OVMF_VARS_SRC" ]]; then
+            cp -f "$OVMF_VARS_SRC" "$LOCAL_VARS"
+        fi
+        echo "Запуск в тестовом режиме (20 сек таймаут), serial → $TEST_LOG"
         RESULT=0
-        timeout 20 qemu-system-x86_64 "${QEMU_OPTS[@]}" || RESULT=$?
+        timeout 20 qemu-system-x86_64 "${QEMU_OPTS[@]}" </dev/null || RESULT=$?
         if [[ "$RESULT" -eq 124 ]]; then
             echo "Таймаут — QEMU остановлена принудительно (норма для теста загрузки)."
         fi
+        echo "--- Последние строки serial: ---"
+        tail -n 20 "$TEST_LOG" 2>/dev/null || true
         exit 0
         ;;
     interactive)
