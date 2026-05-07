@@ -84,6 +84,20 @@ fb_pix_loop:
     jnz     fb_row_loop
 skip_fb_marker:
 
+    # ---------- Сохраняем fb_адрес/fb_шаг для раннего IDT ----------
+    # Если ниже что-то фолтит (триплфолт = ребут на голом железе),
+    # ранний обработчик нарисует широкую красную полосу в FB и зависнет.
+    # Так мы УВИДИМ фолт вместо немой перезагрузки.
+    test    rsi, rsi
+    jz      skip_save_fb
+    mov     rax, [rsi + 24]                 # фб_адрес
+    lea     rdi, [rip + ranniy_fb_address]
+    mov     [rdi], rax
+    mov     eax, dword ptr [rsi + 48]       # фб_шаг_пикселей
+    lea     rdi, [rip + ranniy_fb_stride]
+    mov     dword ptr [rdi], eax
+skip_save_fb:
+
     # ---------- Подготовка таблиц страниц ----------
     # PML4[0] -> PDPT
     lea     rax, [rip + PML4]
@@ -148,6 +162,13 @@ fill_uefi_loop:
     mov     rbp, rsp
     cld
 
+    # ---------- Ставим минимальный ранний IDT ----------
+    # Назначение: перехватить любую CPU-исключение (#GP, #PF, #UD, #DE и т.д.)
+    # и вместо безмолвного triple-fault'а нарисовать видимую полосу в FB
+    # и повиснуть. На железе это превращает «ребут на ASUS-логотипе» в
+    # «зависший экран с белой полосой» — пользователь видит что упало.
+    call    install_early_idt
+
     # Восстанавливаем аргументы.
     mov     rdi, r12
     mov     rsi, r13
@@ -161,3 +182,107 @@ hang_uefi:
     jmp     hang_uefi
 
 .size kernel_entry_uefi, . - kernel_entry_uefi
+
+# ============================================================
+# Минимальный ранний IDT с одним общим обработчиком фолтов.
+#
+# Каждая из 32 записей CPU-исключений ведёт в common_fault_handler.
+# Обработчик пишет в FB widely-видимую полосу (тёмно-красная —
+# 0x000000FF в BGRA, при любом RGB/BGR порядке выглядит как красный
+# либо синий) и зависает. Главное — не происходит безмолвного
+# triple-fault → reset.
+# ============================================================
+.section .text, "ax"
+.code64
+.global install_early_idt
+.type install_early_idt, @function
+install_early_idt:
+    # Заполняем 32 IDT-входа адресом common_fault_handler.
+    # Формат IDT-входа (16 байт):
+    #   +0  смещение[0..15]
+    #   +2  селектор (CS = 0x08)
+    #   +4  ist=0
+    #   +5  type/attr = 0x8E (P=1, DPL=0, type=interrupt gate)
+    #   +6  смещение[16..31]
+    #   +8  смещение[32..63]
+    #   +12 резерв = 0
+    lea     rax, [rip + common_fault_handler]
+    lea     rdi, [rip + ranniy_idt_data]
+    mov     rcx, 32
+fill_idt_entry:
+    mov     word ptr  [rdi + 0],  ax              # смещение 0..15
+    mov     word ptr  [rdi + 2],  0x08            # селектор CS
+    mov     byte ptr  [rdi + 4],  0               # ist = 0
+    mov     byte ptr  [rdi + 5],  0x8E            # P=1, DPL=0, interrupt gate
+    mov     rbx, rax
+    shr     rbx, 16
+    mov     word ptr  [rdi + 6],  bx              # смещение 16..31
+    mov     rbx, rax
+    shr     rbx, 32
+    mov     dword ptr [rdi + 8],  ebx             # смещение 32..63
+    mov     dword ptr [rdi + 12], 0               # резерв
+    add     rdi, 16
+    dec     rcx
+    jnz     fill_idt_entry
+
+    # Сборка IDTR-указателя.
+    lea     rax, [rip + ranniy_idt_pointer]
+    mov     word ptr  [rax + 0], 32 * 16 - 1      # лимит
+    lea     rbx, [rip + ranniy_idt_data]
+    mov     qword ptr [rax + 2], rbx
+    lidt    [rax]
+    ret
+.size install_early_idt, . - install_early_idt
+
+.global common_fault_handler
+.type common_fault_handler, @function
+common_fault_handler:
+    cli
+    # Рисуем 16 строк ярко-красным (0x00FF0000) на всю ширину FB.
+    # Это безусловный сигнал «ядро поймало исключение и повисло».
+    lea     rax, [rip + ranniy_fb_address]
+    mov     rax, [rax]
+    test    rax, rax
+    jz      fault_hang
+    lea     rdx, [rip + ranniy_fb_stride]
+    mov     edx, dword ptr [rdx]
+    test    edx, edx
+    jz      fault_hang
+    mov     r10, 16
+fault_fill_row:
+    mov     rdi, rax
+    mov     ecx, edx                              # пикселей в строке
+    mov     ebx, 0x00FF0000                       # ярко-красный
+fault_fill_pix:
+    mov     dword ptr [rdi], ebx
+    add     rdi, 4
+    dec     rcx
+    jnz     fault_fill_pix
+    mov     ebx, edx
+    shl     rbx, 2                                 # шаг_байт = шаг_пикс * 4
+    add     rax, rbx
+    dec     r10
+    jnz     fault_fill_row
+fault_hang:
+    cli
+    hlt
+    jmp     fault_hang
+.size common_fault_handler, . - common_fault_handler
+
+# Данные раннего IDT — 32 * 16 = 512 байт + 10 байт указателя + 16 байт fb.
+# Лежат в .bss, занулены загрузчиком на старте.
+.section .bss
+.align 16
+.global ranniy_idt_data
+ranniy_idt_data:
+    .skip 32 * 16
+.global ranniy_idt_pointer
+ranniy_idt_pointer:
+    .skip 10
+.global ranniy_fb_address
+ranniy_fb_address:
+    .skip 8
+.global ranniy_fb_stride
+ranniy_fb_stride:
+    .skip 4
+    .skip 4    # выравнивание

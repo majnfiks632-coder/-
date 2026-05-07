@@ -227,7 +227,11 @@ fn главная(_образ: Handle, mut услуги: SystemTable<Boot>) -> S
     let страниц_под_карту = (байт_под_карту + 0xFFF) / 0x1000;
 
     let стр_инфо = match услуги.boot_services().allocate_pages(
-        AllocateType::AnyPages,
+        // Гарантируем, что эти структуры лежат ниже 4 ГиБ — наша начальная
+        // PML4 (см. вход_uefi.s) идентично маппит только 0..4 ГиБ. На
+        // некоторых UEFI-прошивках AllocateType::AnyPages может вернуть
+        // адрес выше 4 ГиБ — тогда ядро #PF'ит при первом же чтении.
+        AllocateType::MaxAddress(0xFFFF_FFFF),
         MemoryType::LOADER_DATA,
         страниц_под_инфо,
     ) {
@@ -235,7 +239,7 @@ fn главная(_образ: Handle, mut услуги: SystemTable<Boot>) -> S
         Err(_) => return Status::OUT_OF_RESOURCES,
     };
     let стр_карта = match услуги.boot_services().allocate_pages(
-        AllocateType::AnyPages,
+        AllocateType::MaxAddress(0xFFFF_FFFF),
         MemoryType::LOADER_DATA,
         страниц_под_карту,
     ) {
