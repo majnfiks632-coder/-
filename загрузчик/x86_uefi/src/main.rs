@@ -189,11 +189,13 @@ fn главная(_образ: Handle, mut услуги: SystemTable<Boot>) -> S
     );
 
     // ---- 3. Получить framebuffer ----
+    println!("[CK1] получаем GOP framebuffer…");
     let (фб_адрес, фб_размер, фб_ширина, фб_высота, фб_шаг, фб_бпп, фб_формат) =
         match получить_framebuffer(&услуги) {
             Some(данные) => данные,
             None => (0, 0, 0, 0, 0, 0, 0),
         };
+    println!("[CK2] GOP получен (адрес=0x{:X})", фб_адрес);
     if фб_адрес != 0 {
         println!(
             "[OK] Framebuffer: {}x{} @ 0x{:X}, шаг {} пикс., {} бит, формат={}",
@@ -204,7 +206,9 @@ fn главная(_образ: Handle, mut услуги: SystemTable<Boot>) -> S
     }
 
     // ---- 4. Найти RSDP в UEFI configuration table ----
+    println!("[CK3] ищем RSDP…");
     let rsdp = найти_rsdp(&услуги);
+    println!("[CK4] RSDP=0x{:X}", rsdp);
     if rsdp != 0 {
         println!("[OK] ACPI RSDP: 0x{:X}", rsdp);
     } else {
@@ -553,12 +557,26 @@ fn получить_framebuffer(
     услуги: &SystemTable<Boot>,
 ) -> Option<(u64, usize, u32, u32, u32, u32, u32)> {
     let bs = услуги.boot_services();
-    let handle = bs
-        .get_handle_for_protocol::<GraphicsOutput>()
-        .ok()?;
-    let mut gop = bs
-        .open_protocol_exclusive::<GraphicsOutput>(handle)
-        .ok()?;
+    let handle = match bs.get_handle_for_protocol::<GraphicsOutput>() {
+        Ok(h) => h,
+        Err(_) => {
+            println!("  (FB) GOP-handle не найден");
+            return None;
+        }
+    };
+    // ВАЖНО: на ASUS X552EA и подобной 2013-й AMI-прошивке
+    // open_protocol_exclusive на GraphicsOutput иногда возвращает ACCESS_DENIED
+    // или вешает прошивку (фирмварь сама держит GOP для своего text-консоли).
+    // Используем мягкую форму — отдадим обычно `BY_HANDLE_PROTOCOL`-эквивалент.
+    // В uefi-крейте 0.34 это всё равно `open_protocol_exclusive`, но при ошибке
+    // мы не падаем, а возвращаем None — ядро останется работать на UEFI-text.
+    let mut gop = match bs.open_protocol_exclusive::<GraphicsOutput>(handle) {
+        Ok(g) => g,
+        Err(ошибка) => {
+            println!("  (FB) open_protocol_exclusive: {:?}", ошибка.status());
+            return None;
+        }
+    };
     let info = gop.current_mode_info();
     let (ширина, высота) = info.resolution();
     let шаг = info.stride() as u32;
@@ -569,6 +587,7 @@ fn получить_framebuffer(
         PixelFormat::BltOnly => ФБ_ФОРМАТ_BLT_ONLY,
     };
     if формат == ФБ_ФОРМАТ_BLT_ONLY {
+        println!("  (FB) формат BLT-only — нельзя писать прямо в память");
         return None;
     }
     let mut фб = gop.frame_buffer();

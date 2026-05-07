@@ -38,6 +38,49 @@ kernel_entry_uefi:
     mov     r12, rdi
     mov     r13, rsi
 
+    # ---------- ОЧЕНЬ РАННИЙ МАЯК (до любого CR3/GDT/стека) ----------
+    # Если эту строку видно в правом верхнем углу VGA текстового режима
+    # (или в углу framebuffer'а как ярко-белые квадраты), значит ядро
+    # физически достигло своей точки входа из UEFI. Без этого маяка
+    # неясно, упал ли загрузчик в ExitBootServices или ядро в первой же
+    # инструкции после прыжка.
+    #
+    # Пишем «UEFI->K» в правый край VGA-буфера 0xB8000 (32-я колонка).
+    # Это идентичный маппинг от UEFI остаётся валидным до mov cr3.
+    mov     rax, 0xB8000
+    mov     word ptr [rax + 64],  0x4F55   # 'U' красный фон, белый текст
+    mov     word ptr [rax + 66],  0x4F45   # 'E'
+    mov     word ptr [rax + 68],  0x4F46   # 'F'
+    mov     word ptr [rax + 70],  0x4F49   # 'I'
+    mov     word ptr [rax + 72],  0x4F2D   # '-'
+    mov     word ptr [rax + 74],  0x4F3E   # '>'
+    mov     word ptr [rax + 76],  0x4F4B   # 'K'
+    mov     word ptr [rax + 78],  0x4F31   # '1'
+
+    # ---------- Маяк в GOP framebuffer ----------
+    # На реальном UEFI-железе VGA-буфер 0xB8000 не работает (нет legacy VGA).
+    # Зато framebuffer от GOP должен быть валиден: загрузчик дал нам указатель
+    # на ИнфоЗагрузки в RSI, в нём фб_адрес лежит по смещению 24.
+    #
+    # Идентичный маппинг от UEFI ещё активен (мы не трогали CR3), так что
+    # framebuffer точно достижим через свой физический адрес.
+    #
+    # Рисуем горизонтальную красно-синюю полосу из 256 пикселей по адресу
+    # фб_адрес+0. Это полоса в верхнем-левом углу экрана.
+    test    rsi, rsi
+    jz      skip_fb_marker
+    mov     rax, [rsi + 24]               # фб_адрес
+    test    rax, rax
+    jz      skip_fb_marker
+    mov     rcx, 512                       # 512 4-байтных пикселей
+    mov     ebx, 0x00FFFF00               # ярко-жёлтый (BGRX/RGBX — оба варианта)
+fb_marker_loop:
+    mov     dword ptr [rax], ebx
+    add     rax, 4
+    dec     rcx
+    jnz     fb_marker_loop
+skip_fb_marker:
+
     # ---------- Подготовка таблиц страниц ----------
     # PML4[0] -> PDPT
     lea     rax, [rip + PML4]
@@ -77,9 +120,19 @@ fill_uefi_loop:
     lea     rax, [rip + PML4]
     mov     cr3, rax
 
+    # Маяк после CR3-переключения: «K2» в той же строке.
+    mov     rax, 0xB8000
+    mov     word ptr [rax + 80],  0x4F4B   # 'K'
+    mov     word ptr [rax + 82],  0x4F32   # '2'
+
     # ---------- Загружаем наш GDT ----------
     lea     rax, [rip + gdt_pointer]
     lgdt    [rax]
+
+    # Маяк после LGDT.
+    mov     rax, 0xB8000
+    mov     word ptr [rax + 84],  0x4F4B   # 'K'
+    mov     word ptr [rax + 86],  0x4F33   # '3'
 
     # Перезагружаем CS через far ret.
     # rax = адрес метки 1, rcx = селектор кода.
@@ -101,6 +154,11 @@ fill_uefi_loop:
     lea     rsp, [rip + stack_top]
     mov     rbp, rsp
     cld
+
+    # Маяк после far-ret + загрузки сегментов + смены стека.
+    mov     rax, 0xB8000
+    mov     word ptr [rax + 88],  0x4F4B   # 'K'
+    mov     word ptr [rax + 90],  0x4F34   # '4'
 
     # Восстанавливаем аргументы.
     mov     rdi, r12
