@@ -1,0 +1,19 @@
+[package]
+name = "dubina-services-drivers"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Системные службы ДубинаОС: каркас драйверов и реализации (таймер, PS/2-клавиатура)"
+
+[lib]
+name = "dubina_services_drivers"
+path = "src/lib.rs"
+
+# no_std + alloc, чтобы крейт собирался и в ядре, и потом в пользовательских
+# службах (когда появится ring 3). Зависимости минимальные: spin для Mutex.
+[dependencies]
+spin = { version = "0.9", default-features = false, features = ["spin_mutex"] }
+
+[features]
+default = []
