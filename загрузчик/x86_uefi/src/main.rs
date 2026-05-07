@@ -29,7 +29,9 @@ use uefi::prelude::*;
 use uefi::println;
 use uefi::proto::console::gop::{GraphicsOutput, PixelFormat};
 use uefi::proto::media::file::{File, FileAttribute, FileMode, FileType, RegularFile};
-use uefi::table::boot::{AllocateType, MemoryType};
+use uefi::table::boot::{
+    AllocateType, MemoryType, OpenProtocolAttributes, OpenProtocolParams,
+};
 use uefi::table::cfg;
 use uefi::CStr16;
 
@@ -564,16 +566,26 @@ fn получить_framebuffer(
             return None;
         }
     };
-    // ВАЖНО: на ASUS X552EA и подобной 2013-й AMI-прошивке
-    // open_protocol_exclusive на GraphicsOutput иногда возвращает ACCESS_DENIED
-    // или вешает прошивку (фирмварь сама держит GOP для своего text-консоли).
-    // Используем мягкую форму — отдадим обычно `BY_HANDLE_PROTOCOL`-эквивалент.
-    // В uefi-крейте 0.34 это всё равно `open_protocol_exclusive`, но при ошибке
-    // мы не падаем, а возвращаем None — ядро останется работать на UEFI-text.
-    let mut gop = match bs.open_protocol_exclusive::<GraphicsOutput>(handle) {
+    // ВАЖНО: на ASUS X552EA (AMI/Phoenix CSM-firmware 2013 г.)
+    // open_protocol_exclusive на GraphicsOutput **зависает** прошивку:
+    // флаг BY_EXCLUSIVE требует от прошивки прервать всех других «агентов»
+    // (включая саму ConsoleOut-консоль), и на этой версии firmware это
+    // приводит к зависанию.
+    //
+    // Используем НЕэксклюзивный вариант — `GetProtocol`. Это безопасно для
+    // нашего сценария: мы только читаем mode info и адрес framebuffer'а
+    // и не собираемся ничего «эксклюзивно держать».
+    let params = OpenProtocolParams {
+        handle,
+        agent: bs.image_handle(),
+        controller: None,
+    };
+    let mut gop = match unsafe {
+        bs.open_protocol::<GraphicsOutput>(params, OpenProtocolAttributes::GetProtocol)
+    } {
         Ok(g) => g,
         Err(ошибка) => {
-            println!("  (FB) open_protocol_exclusive: {:?}", ошибка.status());
+            println!("  (FB) open_protocol(GetProtocol): {:?}", ошибка.status());
             return None;
         }
     };

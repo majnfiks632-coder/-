@@ -72,6 +72,14 @@ kernel_entry:
     cli
     cld
 
+    # ----- МАЯК KRN: пишем «KRN-PM32» в 6-ю строку VGA-буфера 0xB8000 -----
+    # Если этот маяк виден — значит ядро получило управление от Stage2 в PM32.
+    # VGA word: младший байт = ASCII, старший = атрибут (0x4F = белый на красном).
+    mov dword ptr [0xB8000 + 160*6 +  0], 0x4F524F4B   # 'K' 'R'
+    mov dword ptr [0xB8000 + 160*6 +  4], 0x4F2D4F4E   # 'N' '-'
+    mov dword ptr [0xB8000 + 160*6 +  8], 0x4F4D4F50   # 'P' 'M'
+    mov dword ptr [0xB8000 + 160*6 + 12], 0x4F324F33   # '3' '2'
+
     # Устанавливаем стек
     mov esp, offset stack_top
     mov ebp, esp

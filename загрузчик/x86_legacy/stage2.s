@@ -45,6 +45,24 @@ stage2_start:
     mov     es, ax
     mov     ss, ax
     mov     sp, 0x7C00
+
+    ; ----- ОЧЕНЬ РАННИЙ МАЯК: пишем «STG2» прямо в VGA-буфер 0xB8000 -----
+    ; Если этот маяк виден на экране в 4-й строке (160 байт = одна строка
+    ; на стандартном текстовом VGA 80×25), значит Stage2 физически достиг
+    ; своей точки входа. Пишем напрямую в видеопамять — без INT 0x10,
+    ; без COM1 — на случай если BIOS-сервисы на этом железе сломаны.
+    push    es
+    mov     ax, 0xB800
+    mov     es, ax
+    mov     word [es:160*4 +  0], 0x4F53  ; 'S' белый на красном
+    mov     word [es:160*4 +  2], 0x4F54  ; 'T'
+    mov     word [es:160*4 +  4], 0x4F47  ; 'G'
+    mov     word [es:160*4 +  6], 0x4F32  ; '2'
+    mov     word [es:160*4 +  8], 0x4F2D  ; '-'
+    mov     word [es:160*4 + 10], 0x4F52  ; 'R' (real mode)
+    mov     word [es:160*4 + 12], 0x4F4D  ; 'M'
+    pop     es
+
     sti
 
     mov     [boot_drive], dl
@@ -358,6 +376,12 @@ protected_mode_entry:
     mov     fs, ax
     mov     gs, ax
     mov     esp, 0x7C00
+
+    ; ----- МАЯК PM32: пишем «PM32» в 5-ю строку VGA-буфера 0xB8000 -----
+    ; Если этот маяк виден — значит Stage2 успешно перешёл в protected mode.
+    ; VGA word: младший байт = ASCII, старший = атрибут (0x4F = белый/красный).
+    mov     dword [0xB8000 + 160*5 +  0], 0x4F4D4F50   ; 'P' 'M'
+    mov     dword [0xB8000 + 160*5 +  4], 0x4F324F33   ; '3' '2'
 
     ; Скопировать ядро из буфера 0x10000 в финальный 0x100000.
     ; Копируем KERNEL_SECTORS * 512 / 4 dword.
