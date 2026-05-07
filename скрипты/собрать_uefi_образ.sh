@@ -55,11 +55,26 @@ if [[ ! -f "$LOADER_EFI" ]]; then
     exit 1
 fi
 
-# 3. Собираем FAT32-образ ESP. UEFI требует именно FAT (FAT12/16/32).
-ESP_SIZE_MB=64
-echo "[uefi] создание FAT32-ESP ($ESP_SIZE_MB МиБ)..."
+# 3. Собираем FAT-образ ESP. UEFI требует FAT (FAT12/16/32). FAT32 имеет
+# минимум ~64 МиБ, поэтому из-за пары сотен КБ полезных данных вся
+# флешка раздувается до 64 МиБ. Чтобы образ был маленьким, считаем
+# реальный размер содержимого и ставим FAT16/FAT12 — у них минимум
+# в десятки раз меньше. Можно переопределить через ESP_SIZE_MB=… (env).
+LOADER_BYTES=$(stat -c%s "$LOADER_EFI")
+KERNEL_BYTES=$(stat -c%s "$KERNEL_ELF")
+PAYLOAD_BYTES=$(( LOADER_BYTES + KERNEL_BYTES ))
+# +512 КиБ под FAT-таблицы и каталоги, +20% запас, округление вверх до МиБ.
+ESP_AUTO_MB=$(( (PAYLOAD_BYTES + 524288) * 12 / 10 / 1048576 + 1 ))
+# FAT16 минимум — ~2 МиБ при кластере 512 Б (4085 кластеров минимум).
+if [[ "$ESP_AUTO_MB" -lt 4 ]]; then
+    ESP_AUTO_MB=4
+fi
+ESP_SIZE_MB="${ESP_SIZE_MB:-$ESP_AUTO_MB}"
+echo "[uefi] создание FAT-ESP ($ESP_SIZE_MB МиБ; payload $PAYLOAD_BYTES Б)..."
 truncate -s "${ESP_SIZE_MB}M" "$ESP_IMG"
-mkfs.vfat -F 32 -n "DUBINAOS" "$ESP_IMG" >/dev/null
+# -F 16: FAT16, минимум ~2 МиБ при -s 1 (один сектор на кластер).
+# UEFI-фирмварь обязана уметь читать FAT12/16/32 — это часть UEFI Spec.
+mkfs.vfat -F 16 -s 1 -n "DUBINAOS" "$ESP_IMG" >/dev/null
 
 mmd -i "$ESP_IMG" ::/EFI ::/EFI/BOOT
 mcopy -i "$ESP_IMG" "$LOADER_EFI" ::/EFI/BOOT/BOOTX64.EFI
