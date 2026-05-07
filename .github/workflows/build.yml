@@ -180,14 +180,19 @@ jobs:
         run: bash скрипты/собрать_iso.sh release
       - name: Тест загрузки GRUB-ISO в QEMU (совместимость)
         run: |
-          timeout 20 qemu-system-x86_64 \
+          # GRUB-ISO в TCG (без KVM) грузится медленнее, чем собственный
+          # MBR-образ, поэтому даём 35 сек и проверяем только то, что
+          # действительно успевает напечатать ядро на этом отрезке —
+          # баннер версии и факт мультизагрузки. Полную цепочку оболочки
+          # уже проверяет шаг выше через свой загрузчик.
+          timeout 35 qemu-system-x86_64 \
             -m 256M -cdrom сборка/dubina.iso -nographic \
             -serial file:/tmp/serial-grub.log -no-reboot -no-shutdown -boot d \
             || true
           echo "=== Серийный вывод (GRUB) ==="
           cat /tmp/serial-grub.log
           echo "============================="
-          grep -qF "ДубинаОС" /tmp/serial-grub.log
+          grep -qF "Версия 0.1.0" /tmp/serial-grub.log
           grep -qF "Multiboot2" /tmp/serial-grub.log
           echo "ОК: GRUB-ISO тоже грузит ядро (для совместимости)"
 
