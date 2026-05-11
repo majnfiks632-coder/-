@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Atlantis · 3D Aquarium</title>
+    <meta
+      name="description"
+      content="An interactive 3D aquarium built with Three.js — realistic water, schooling fish, animated caustics, plants, bubbles, and god rays."
+    />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%90%A0%3C/text%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.1/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.1/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="loader" aria-live="polite">
+      <div class="loader-inner">
+        <svg
+          class="loader-fish"
+          viewBox="0 0 100 60"
+          aria-hidden="true"
+        >
+          <path
+            d="M5 30 Q 30 5 60 15 Q 85 25 95 30 Q 85 35 60 45 Q 30 55 5 30 Z"
+            fill="#5fd0ff"
+          />
+          <circle cx="78" cy="26" r="2.4" fill="#0a1a2a" />
+          <path
+            d="M3 30 L -8 18 L -8 42 Z"
+            fill="#5fd0ff"
+            transform="translate(13,0)"
+          />
+        </svg>
+        <p class="loader-text">Filling the tank…</p>
+      </div>
+    </div>
+
+    <canvas id="scene" aria-label="3D aquarium scene"></canvas>
+
+    <header id="hud-top">
+      <h1>
+        <span class="brand-mark">Atlantis</span>
+        <span class="brand-sub">3D Aquarium</span>
+      </h1>
+      <p class="hint">Drag to orbit · Scroll to zoom · Click the tank to feed the fish</p>
+    </header>
+
+    <nav id="hud-controls" aria-label="Aquarium controls">
+      <button data-action="toggle-day" title="Toggle day/night">
+        <span class="ico" aria-hidden="true">☀</span>
+        <span class="lbl">Night</span>
+      </button>
+      <button data-action="toggle-rotate" title="Toggle auto-rotate">
+        <span class="ico" aria-hidden="true">↻</span>
+        <span class="lbl">Auto-rotate</span>
+      </button>
+      <button data-action="feed" title="Drop food into the tank">
+        <span class="ico" aria-hidden="true">✦</span>
+        <span class="lbl">Feed</span>
+      </button>
+      <button data-action="add-fish" title="Add more fish">
+        <span class="ico" aria-hidden="true">+</span>
+        <span class="lbl">More fish</span>
+      </button>
+      <button data-action="toggle-bloom" title="Toggle bloom post-processing">
+        <span class="ico" aria-hidden="true">✺</span>
+        <span class="lbl">Bloom</span>
+      </button>
+    </nav>
+
+    <aside id="hud-stats" aria-label="Scene stats">
+      <div><span class="k">FPS</span><span class="v" data-v="fps">–</span></div>
+      <div><span class="k">Fish</span><span class="v" data-v="fish">–</span></div>
+      <div><span class="k">Mode</span><span class="v" data-v="mode">Day</span></div>
+    </aside>
+
+    <footer id="hud-foot">
+      <a
+        href="https://threejs.org"
+        target="_blank"
+        rel="noopener noreferrer"
+        >Built with Three.js</a
+      >
+    </footer>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
