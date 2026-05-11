@@ -13,7 +13,7 @@ export function buildGodRays(bounds) {
   const baseUniforms = {
     uTime: { value: 0 },
     uColor: { value: new THREE.Color(0xfff1c4) },
-    uOpacity: { value: 0.32 },
+    uOpacity: { value: 0.18 },
   };
 
   const mat = new THREE.ShaderMaterial({

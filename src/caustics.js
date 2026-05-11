@@ -12,7 +12,7 @@ export function buildCaustics(bounds) {
 
   const uniforms = {
     uTime: { value: 0 },
-    uIntensity: { value: 0.55 },
+    uIntensity: { value: 0.32 },
     uTint: { value: new THREE.Color(0xb6e6ff) },
   };
 

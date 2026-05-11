@@ -21,7 +21,7 @@ export function createSceneCore(canvas) {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 0.9;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -59,9 +59,9 @@ export function createSceneCore(canvas) {
 
   const bloomPass = new UnrealBloomPass(
     new THREE.Vector2(window.innerWidth, window.innerHeight),
-    0.45, // strength
-    0.65, // radius
-    0.78 // threshold — only really bright highlights bloom
+    0.22, // strength — subtle, real GPUs would otherwise blow out highlights
+    0.5, // radius
+    1.05 // threshold — only post-tone-map values above ~1 bloom
   );
   composer.addPass(bloomPass);
 
