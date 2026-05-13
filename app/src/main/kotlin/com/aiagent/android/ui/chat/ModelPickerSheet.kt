@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,16 +21,22 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,16 +49,50 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aiagent.android.ui.theme.KiroColors
+import kotlinx.coroutines.launch
 
+/**
+ * Bottom sheet that asks the configured OpenAI-compatible endpoint for its model list
+ * (`GET {baseUrl}/models`) instead of hard-coding one. Falls back to a textual prompt
+ * if Base URL is empty / the call fails. There is always a "custom model id" escape
+ * hatch at the bottom in case the user wants to type one in manually (e.g. tiny
+ * llama.cpp servers that don't implement `/models`).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ModelPickerSheet(
     selected: String,
+    baseUrlConfigured: Boolean,
+    loadModels: suspend () -> Result<List<String>>,
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var customInput by remember { mutableStateOf("") }
+
+    var loading by remember { mutableStateOf(false) }
+    var models by remember { mutableStateOf<List<String>>(emptyList()) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    suspend fun reload() {
+        loading = true
+        error = null
+        val result = loadModels()
+        result.onSuccess {
+            models = it
+            error = if (it.isEmpty()) "Провайдер вернул пустой список моделей." else null
+        }.onFailure {
+            models = emptyList()
+            error = it.message ?: it::class.java.simpleName
+        }
+        loading = false
+    }
+
+    LaunchedEffect(baseUrlConfigured) {
+        if (baseUrlConfigured) reload()
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -62,29 +103,80 @@ fun ModelPickerSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
+                .heightIn(min = 200.dp)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            Text(
-                text = "Выбор модели",
-                color = KiroColors.Foreground,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Выбор модели",
+                    color = KiroColors.Foreground,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                if (baseUrlConfigured) {
+                    IconButton(
+                        onClick = { scope.launch { reload() } },
+                        enabled = !loading,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Refresh,
+                            contentDescription = "Обновить",
+                            tint = if (loading) KiroColors.Muted else KiroColors.Accent2,
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Список курируется как в Kiro Mobile Chat — подключение идёт через OpenAI-совместимый baseUrl из настроек.",
+                text = if (baseUrlConfigured) {
+                    "Список грузится с GET {baseUrl}/models — OpenAI-совместимый эндпоинт."
+                } else {
+                    "Сначала вставь Base URL и API-ключ в Настройках — потом тут появится список моделей провайдера."
+                },
                 color = KiroColors.Muted,
                 fontSize = 12.sp,
             )
 
             Spacer(Modifier.height(12.dp))
-            KIRO_MODELS.forEach { entry ->
-                ModelRow(
-                    model = entry,
-                    selected = entry.id == selected,
-                    onClick = { onSelect(entry.id) },
-                )
-                Spacer(Modifier.height(6.dp))
+
+            when {
+                !baseUrlConfigured -> {
+                    EmptyHint(
+                        text = "Открой ⚙ Настройки → API провайдера и заполни Base URL и ключ.",
+                    )
+                }
+                loading -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(vertical = 16.dp),
+                    ) {
+                        CircularProgressIndicator(
+                            color = KiroColors.Accent,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = "Гружу список моделей…",
+                            color = KiroColors.Muted,
+                            fontSize = 13.sp,
+                        )
+                    }
+                }
+                error != null -> {
+                    ErrorHint(text = error.orEmpty())
+                }
+                else -> {
+                    models.forEach { id ->
+                        ModelRow(
+                            id = id,
+                            selected = id == selected,
+                            onClick = { onSelect(id) },
+                        )
+                        Spacer(Modifier.height(6.dp))
+                    }
+                }
             }
 
             Spacer(Modifier.height(16.dp))
@@ -93,6 +185,12 @@ fun ModelPickerSheet(
                 color = KiroColors.Foreground,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = "Если провайдер не отдаёт /models или нужна конкретная сборка — впиши вручную.",
+                color = KiroColors.Muted,
+                fontSize = 11.sp,
             )
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -145,7 +243,7 @@ fun ModelPickerSheet(
 }
 
 @Composable
-private fun ModelRow(model: KiroModel, selected: Boolean, onClick: () -> Unit) {
+private fun ModelRow(id: String, selected: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -167,34 +265,13 @@ private fun ModelRow(model: KiroModel, selected: Boolean, onClick: () -> Unit) {
             modifier = Modifier.size(16.dp),
         )
         Spacer(Modifier.width(10.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = model.label,
-                    color = KiroColors.Foreground,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = model.context,
-                    color = KiroColors.Accent2,
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
-                )
-            }
-            Text(
-                text = model.description,
-                color = KiroColors.Muted,
-                fontSize = 12.sp,
-            )
-            Text(
-                text = model.id,
-                color = KiroColors.Muted.copy(alpha = 0.7f),
-                fontSize = 11.sp,
-                fontFamily = FontFamily.Monospace,
-            )
-        }
+        Text(
+            text = id,
+            color = KiroColors.Foreground,
+            fontSize = 14.sp,
+            fontFamily = FontFamily.Monospace,
+            modifier = Modifier.weight(1f),
+        )
         if (selected) {
             Icon(
                 imageVector = Icons.Outlined.Check,
@@ -203,5 +280,54 @@ private fun ModelRow(model: KiroModel, selected: Boolean, onClick: () -> Unit) {
                 modifier = Modifier.size(18.dp),
             )
         }
+    }
+}
+
+@Composable
+private fun EmptyHint(text: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(KiroColors.Surface2.copy(alpha = 0.5f))
+            .border(1.dp, KiroColors.Border, RoundedCornerShape(10.dp))
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+    ) {
+        Text(text = text, color = KiroColors.Muted, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun ErrorHint(text: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color(0x22E36464))
+            .border(1.dp, KiroColors.Danger, RoundedCornerShape(10.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = Icons.Outlined.WarningAmber,
+                contentDescription = null,
+                tint = KiroColors.Danger,
+                modifier = Modifier.size(16.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "Не получилось загрузить модели",
+                color = KiroColors.Danger,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        Text(
+            text = text,
+            color = KiroColors.Muted,
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace,
+        )
     }
 }

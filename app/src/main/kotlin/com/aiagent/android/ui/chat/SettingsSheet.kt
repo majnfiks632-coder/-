@@ -61,7 +61,6 @@ fun SettingsSheet(
     onDismiss: () -> Unit,
     onApiKey: (String) -> Unit,
     onBaseUrl: (String) -> Unit,
-    onMaxSteps: (Int) -> Unit,
     onTemperature: (Float) -> Unit,
     onMaxTokens: (Int) -> Unit,
     onSystemPrompt: (String) -> Unit,
@@ -118,12 +117,6 @@ fun SettingsSheet(
 
             // -------- Generation --------
             SectionTitle("Параметры генерации")
-            NumberRow(
-                label = "Макс. шагов агента",
-                value = state.maxSteps,
-                placeholder = "10000",
-                onChange = onMaxSteps,
-            )
             NumberRow(
                 label = "Макс. токенов ответа",
                 value = state.maxTokens,

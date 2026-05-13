@@ -11,13 +11,12 @@ class Settings(context: Context) {
 
     init {
         // One-shot migration: builds prior to v3 shipped with maxSteps default = 20. The
-        // user explicitly asked for ≥ 10000. Bump any persisted value that's still at the
-        // old default (or any small value) so they don't have to re-set it after upgrade.
-        if (!prefs.getBoolean(KEY_MIGRATED_MAX_STEPS_V3, false)) {
-            val current = prefs.getInt(KEY_MAX_STEPS, DEFAULT_MAX_STEPS)
+        // user explicitly asked for unbounded steps — always force MAX_VALUE so old
+        // installs that persisted 10_000 also start running unbounded.
+        if (!prefs.getBoolean(KEY_MIGRATED_MAX_STEPS_V4, false)) {
             prefs.edit {
-                if (current < 100) putInt(KEY_MAX_STEPS, DEFAULT_MAX_STEPS)
-                putBoolean(KEY_MIGRATED_MAX_STEPS_V3, true)
+                putInt(KEY_MAX_STEPS, DEFAULT_MAX_STEPS)
+                putBoolean(KEY_MIGRATED_MAX_STEPS_V4, true)
             }
         }
         // One-shot migration: previous builds defaulted reasoning_effort to "low" and
@@ -235,9 +234,13 @@ class Settings(context: Context) {
 
     companion object {
         const val PREFS_NAME = "agent_prefs"
-        const val DEFAULT_BASE_URL = "https://api.groq.com/openai/v1"
-        const val DEFAULT_MODEL = "openai/gpt-oss-120b"
-        const val DEFAULT_MAX_STEPS = 10_000
+        // Empty by design — user enters their own endpoint. Default Groq URL was confusing
+        // for a Kiro-branded app ("why does it say Kiro but ping Groq?").
+        const val DEFAULT_BASE_URL = ""
+        const val DEFAULT_MODEL = "auto"
+        // Agent runs unbounded — the model decides when it's done. Kept as a high cap to
+        // protect against truly broken loops, but the UI no longer surfaces this knob.
+        const val DEFAULT_MAX_STEPS = Int.MAX_VALUE
         const val DEFAULT_TEMPERATURE = 0.2f
         const val DEFAULT_MAX_TOKENS = 2048
         // Empty by default: most providers/models do NOT accept this parameter and will
@@ -281,7 +284,7 @@ class Settings(context: Context) {
         private const val KEY_BASE_URL = "base_url"
         private const val KEY_MODEL = "model"
         private const val KEY_MAX_STEPS = "max_steps"
-        private const val KEY_MIGRATED_MAX_STEPS_V3 = "migrated_max_steps_v3"
+        private const val KEY_MIGRATED_MAX_STEPS_V4 = "migrated_max_steps_v4"
         private const val KEY_MIGRATED_REASONING_V3 = "migrated_reasoning_v3"
         private const val KEY_TEMPERATURE = "temperature"
         private const val KEY_MAX_TOKENS = "max_tokens"

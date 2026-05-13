@@ -106,7 +106,6 @@ data class ChatUiState(
     // Mirror of [com.aiagent.android.data.Settings] for the settings sheet.
     val apiKey: String = "",
     val baseUrl: String = "",
-    val maxSteps: Int = 10_000,
     val temperature: Float = 0.2f,
     val maxTokens: Int = 2048,
     val systemPrompt: String = "",

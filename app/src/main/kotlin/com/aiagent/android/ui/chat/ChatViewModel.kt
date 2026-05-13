@@ -15,6 +15,7 @@ import com.aiagent.android.agent.Agent
 import com.aiagent.android.agent.AgentLog
 import com.aiagent.android.data.Settings
 import com.aiagent.android.llm.ChatMessage as LlmChatMessage
+import com.aiagent.android.llm.LlmClient
 import com.aiagent.android.llm.textMessage
 import com.aiagent.android.overlay.JoystickOverlayService
 import com.aiagent.android.overlay.OverlayService
@@ -69,7 +70,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 quotaCap = storage.loadQuotaCap(),
                 apiKey = settings.apiKey,
                 baseUrl = settings.baseUrl,
-                maxSteps = settings.maxSteps,
                 temperature = settings.temperature,
                 maxTokens = settings.maxTokens,
                 systemPrompt = settings.systemPrompt,
@@ -276,6 +276,26 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     // Model + settings updates (UI ↔ legacy Settings bridge)
     // -----------------------------------------------------------------------------------------
 
+    /**
+     * Fetches the model list from the configured OpenAI-compatible endpoint.
+     * Surfaces network/auth failures back to the picker as a `Result.failure`
+     * so the UI can render a non-fatal error card and let the user retry.
+     */
+    suspend fun loadModels(): Result<List<String>> {
+        val baseUrl = settings.baseUrl.trim()
+        if (baseUrl.isBlank()) {
+            return Result.failure(IllegalStateException("Base URL пустой — вставь его в настройках."))
+        }
+        val client = LlmClient(baseUrl = baseUrl, apiKey = settings.apiKey)
+        return try {
+            Result.success(client.listModels())
+        } catch (t: Throwable) {
+            Result.failure(t)
+        } finally {
+            client.close()
+        }
+    }
+
     fun setModel(id: String) {
         settings.model = id
         storage.saveModel(id)
@@ -288,7 +308,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun updateApiKey(v: String) { settings.apiKey = v; _state.update { it.copy(apiKey = v) } }
     fun updateBaseUrl(v: String) { settings.baseUrl = v; _state.update { it.copy(baseUrl = v) } }
-    fun updateMaxSteps(v: Int) { settings.maxSteps = v; _state.update { it.copy(maxSteps = v) } }
     fun updateTemperature(v: Float) { settings.temperature = v; _state.update { it.copy(temperature = v) } }
     fun updateMaxTokens(v: Int) { settings.maxTokens = v; _state.update { it.copy(maxTokens = v) } }
     fun updateSystemPrompt(v: String) { settings.systemPrompt = v; _state.update { it.copy(systemPrompt = v) } }
