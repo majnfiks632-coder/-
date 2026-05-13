@@ -1,0 +1,19 @@
+<resources>
+    <!--
+        Dark, edge-to-edge launcher theme styled after Kiro Mobile Chat. We use
+        the platform Material dark base (no AppCompat dependency needed). Compose
+        owns the foreground colours; only the system bars are themed here.
+    -->
+    <style name="Theme.KiroAgent" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#0B0D12</item>
+        <item name="android:navigationBarColor">#0B0D12</item>
+        <item name="android:windowBackground">@color/kiro_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+    <!-- Backwards-compatibility alias: AndroidManifest.xml previously referenced
+         Theme.AIAgent; keep the symbol alive so any out-of-tree reference still
+         resolves to the new dark Kiro theme. -->
+    <style name="Theme.AIAgent" parent="Theme.KiroAgent" />
+</resources>
