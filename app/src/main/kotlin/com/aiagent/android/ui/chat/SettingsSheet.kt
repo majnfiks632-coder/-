@@ -59,8 +59,13 @@ import com.aiagent.android.ui.theme.KiroColors
 fun SettingsSheet(
     state: ChatUiState,
     onDismiss: () -> Unit,
-    onApiKey: (String) -> Unit,
-    onBaseUrl: (String) -> Unit,
+    onProvider1Name: (String) -> Unit,
+    onProvider1BaseUrl: (String) -> Unit,
+    onProvider1ApiKey: (String) -> Unit,
+    onProvider2Name: (String) -> Unit,
+    onProvider2BaseUrl: (String) -> Unit,
+    onProvider2ApiKey: (String) -> Unit,
+    onActiveProvider: (Int) -> Unit,
     onTemperature: (Float) -> Unit,
     onMaxTokens: (Int) -> Unit,
     onSystemPrompt: (String) -> Unit,
@@ -97,22 +102,32 @@ fun SettingsSheet(
                 fontWeight = FontWeight.SemiBold,
             )
 
-            // -------- API --------
-            SectionTitle("API провайдера")
-            TextRow(
-                label = "Base URL",
-                value = state.baseUrl,
-                placeholder = "https://api.openai.com/v1",
-                onChange = onBaseUrl,
-                mono = true,
+            // -------- API providers (Groq + Kiro AI by default) --------
+            SectionTitle("Активный провайдер")
+            ActiveProviderRow(
+                activeProvider = state.activeProvider,
+                provider1Name = state.provider1Name,
+                provider2Name = state.provider2Name,
+                onActiveProvider = onActiveProvider,
             )
-            TextRow(
-                label = "API ключ",
-                value = state.apiKey,
-                placeholder = "sk-…",
-                onChange = onApiKey,
-                mono = true,
-                secret = true,
+
+            ProviderCard(
+                title = "Провайдер 1",
+                name = state.provider1Name,
+                baseUrl = state.provider1BaseUrl,
+                apiKey = state.provider1ApiKey,
+                onName = onProvider1Name,
+                onBaseUrl = onProvider1BaseUrl,
+                onApiKey = onProvider1ApiKey,
+            )
+            ProviderCard(
+                title = "Провайдер 2",
+                name = state.provider2Name,
+                baseUrl = state.provider2BaseUrl,
+                apiKey = state.provider2ApiKey,
+                onName = onProvider2Name,
+                onBaseUrl = onProvider2BaseUrl,
+                onApiKey = onProvider2ApiKey,
             )
 
             // -------- Generation --------
@@ -240,6 +255,127 @@ private fun SectionTitle(text: String) {
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(top = 6.dp),
     )
+}
+
+@Composable
+private fun ActiveProviderRow(
+    activeProvider: Int,
+    provider1Name: String,
+    provider2Name: String,
+    onActiveProvider: (Int) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        ProviderToggle(
+            label = provider1Name.ifBlank { "Провайдер 1" },
+            slotNumber = 1,
+            active = activeProvider == 1,
+            onClick = { onActiveProvider(1) },
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(8.dp))
+        ProviderToggle(
+            label = provider2Name.ifBlank { "Провайдер 2" },
+            slotNumber = 2,
+            active = activeProvider == 2,
+            onClick = { onActiveProvider(2) },
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun ProviderToggle(
+    label: String,
+    slotNumber: Int,
+    active: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (active) KiroColors.Accent else KiroColors.Surface2)
+            .border(
+                1.dp,
+                if (active) KiroColors.Accent else KiroColors.Border,
+                RoundedCornerShape(10.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "#$slotNumber",
+            color = if (active) Color.White.copy(alpha = 0.85f) else KiroColors.Muted,
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace,
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = label,
+            color = if (active) Color.White else KiroColors.Foreground,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+        )
+        if (active) {
+            Icon(
+                imageVector = Icons.Outlined.Check,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProviderCard(
+    title: String,
+    name: String,
+    baseUrl: String,
+    apiKey: String,
+    onName: (String) -> Unit,
+    onBaseUrl: (String) -> Unit,
+    onApiKey: (String) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(KiroColors.Surface2.copy(alpha = 0.4f))
+            .border(1.dp, KiroColors.Border, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = title,
+            color = KiroColors.Foreground,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        TextRow(
+            label = "Название",
+            value = name,
+            placeholder = "Groq / Kiro AI / OpenRouter",
+            onChange = onName,
+        )
+        TextRow(
+            label = "Base URL",
+            value = baseUrl,
+            placeholder = "https://api.example.com/v1",
+            onChange = onBaseUrl,
+            mono = true,
+        )
+        TextRow(
+            label = "API ключ",
+            value = apiKey,
+            placeholder = "sk-…",
+            onChange = onApiKey,
+            mono = true,
+            secret = true,
+        )
+    }
 }
 
 @Composable

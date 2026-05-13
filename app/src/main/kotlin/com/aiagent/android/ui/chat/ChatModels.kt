@@ -56,6 +56,14 @@ data class UiAttachment(
 
 enum class AttachmentKind { IMAGE, FILE }
 
+/** One provider's model list (or the failure to fetch it). Rendered as a
+ *  collapsible section in [ModelPickerSheet]. */
+data class ProviderModels(
+    val slot: Int,
+    val name: String,
+    val result: Result<List<String>>,
+)
+
 /** Single-turn token usage (Kiro / OpenAI shape). */
 data class TurnUsage(
     val promptTokens: Int = 0,
@@ -104,8 +112,14 @@ data class ChatUiState(
     val quotaPanelOpen: Boolean = false,
 
     // Mirror of [com.aiagent.android.data.Settings] for the settings sheet.
-    val apiKey: String = "",
-    val baseUrl: String = "",
+    // Two-provider config: each slot has a free-form label, a base URL, and an API key.
+    val activeProvider: Int = 1,
+    val provider1Name: String = "Groq",
+    val provider1BaseUrl: String = "https://api.groq.com/openai/v1",
+    val provider1ApiKey: String = "",
+    val provider2Name: String = "Kiro AI",
+    val provider2BaseUrl: String = "",
+    val provider2ApiKey: String = "",
     val temperature: Float = 0.2f,
     val maxTokens: Int = 2048,
     val systemPrompt: String = "",

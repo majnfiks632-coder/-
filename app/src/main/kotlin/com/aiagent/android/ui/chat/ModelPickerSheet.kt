@@ -52,46 +52,34 @@ import com.aiagent.android.ui.theme.KiroColors
 import kotlinx.coroutines.launch
 
 /**
- * Bottom sheet that asks the configured OpenAI-compatible endpoint for its model list
- * (`GET {baseUrl}/models`) instead of hard-coding one. Falls back to a textual prompt
- * if Base URL is empty / the call fails. There is always a "custom model id" escape
- * hatch at the bottom in case the user wants to type one in manually (e.g. tiny
- * llama.cpp servers that don't implement `/models`).
+ * Picks one (provider, model) tuple. Fetches each provider's `/models` list in parallel
+ * and groups them visually into named sections. Selecting a model also switches the
+ * active provider so chat / STT go to the right endpoint.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ModelPickerSheet(
-    selected: String,
-    baseUrlConfigured: Boolean,
-    loadModels: suspend () -> Result<List<String>>,
-    onSelect: (String) -> Unit,
+    selectedModel: String,
+    selectedSlot: Int,
+    loadModels: suspend () -> List<ProviderModels>,
+    onSelect: (slot: Int, id: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var customInput by remember { mutableStateOf("") }
+    var customSlot by remember { mutableStateOf(selectedSlot) }
 
     var loading by remember { mutableStateOf(false) }
-    var models by remember { mutableStateOf<List<String>>(emptyList()) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var groups by remember { mutableStateOf<List<ProviderModels>>(emptyList()) }
     val scope = rememberCoroutineScope()
 
     suspend fun reload() {
         loading = true
-        error = null
-        val result = loadModels()
-        result.onSuccess {
-            models = it
-            error = if (it.isEmpty()) "Провайдер вернул пустой список моделей." else null
-        }.onFailure {
-            models = emptyList()
-            error = it.message ?: it::class.java.simpleName
-        }
+        groups = loadModels()
         loading = false
     }
 
-    LaunchedEffect(baseUrlConfigured) {
-        if (baseUrlConfigured) reload()
-    }
+    LaunchedEffect(Unit) { reload() }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -114,72 +102,53 @@ fun ModelPickerSheet(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
-                if (baseUrlConfigured) {
-                    IconButton(
-                        onClick = { scope.launch { reload() } },
-                        enabled = !loading,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Refresh,
-                            contentDescription = "Обновить",
-                            tint = if (loading) KiroColors.Muted else KiroColors.Accent2,
-                        )
-                    }
+                IconButton(onClick = { scope.launch { reload() } }, enabled = !loading) {
+                    Icon(
+                        imageVector = Icons.Outlined.Refresh,
+                        contentDescription = "Обновить",
+                        tint = if (loading) KiroColors.Muted else KiroColors.Accent2,
+                    )
                 }
             }
             Spacer(Modifier.height(4.dp))
             Text(
-                text = if (baseUrlConfigured) {
-                    "Список грузится с GET {baseUrl}/models — OpenAI-совместимый эндпоинт."
-                } else {
-                    "Сначала вставь Base URL и API-ключ в Настройках — потом тут появится список моделей провайдера."
-                },
+                text = "Подтягиваем `/models` с обоих провайдеров. Тапаешь модель — она выбирается и активный провайдер переключается автоматом.",
                 color = KiroColors.Muted,
                 fontSize = 12.sp,
             )
 
             Spacer(Modifier.height(12.dp))
 
-            when {
-                !baseUrlConfigured -> {
-                    EmptyHint(
-                        text = "Открой ⚙ Настройки → API провайдера и заполни Base URL и ключ.",
+            if (loading && groups.isEmpty()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(vertical = 16.dp),
+                ) {
+                    CircularProgressIndicator(
+                        color = KiroColors.Accent,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = "Гружу список моделей…",
+                        color = KiroColors.Muted,
+                        fontSize = 13.sp,
                     )
                 }
-                loading -> {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(vertical = 16.dp),
-                    ) {
-                        CircularProgressIndicator(
-                            color = KiroColors.Accent,
-                            strokeWidth = 2.dp,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            text = "Гружу список моделей…",
-                            color = KiroColors.Muted,
-                            fontSize = 13.sp,
-                        )
-                    }
-                }
-                error != null -> {
-                    ErrorHint(text = error.orEmpty())
-                }
-                else -> {
-                    models.forEach { id ->
-                        ModelRow(
-                            id = id,
-                            selected = id == selected,
-                            onClick = { onSelect(id) },
-                        )
-                        Spacer(Modifier.height(6.dp))
-                    }
+            } else {
+                groups.forEach { group ->
+                    ProviderSection(
+                        group = group,
+                        selectedModel = selectedModel,
+                        selectedSlot = selectedSlot,
+                        onSelect = onSelect,
+                    )
+                    Spacer(Modifier.height(12.dp))
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(8.dp))
             Text(
                 text = "Свой ID модели",
                 color = KiroColors.Foreground,
@@ -188,10 +157,37 @@ fun ModelPickerSheet(
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                text = "Если провайдер не отдаёт /models или нужна конкретная сборка — впиши вручную.",
+                text = "Если провайдер не отдаёт /models или нужна конкретная сборка — впиши вручную и выбери провайдер.",
                 color = KiroColors.Muted,
                 fontSize = 11.sp,
             )
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                listOf(1, 2).forEach { slot ->
+                    val name = groups.firstOrNull { it.slot == slot }?.name ?: "Provider $slot"
+                    val isActive = customSlot == slot
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isActive) KiroColors.Accent else KiroColors.Surface2)
+                            .border(
+                                1.dp,
+                                if (isActive) KiroColors.Accent else KiroColors.Border,
+                                RoundedCornerShape(10.dp),
+                            )
+                            .clickable { customSlot = slot }
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                    ) {
+                        Text(
+                            text = name,
+                            color = if (isActive) Color.White else KiroColors.Foreground,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                    Spacer(Modifier.width(6.dp))
+                }
+            }
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
@@ -230,7 +226,9 @@ fun ModelPickerSheet(
                         .height(40.dp)
                         .clip(CircleShape)
                         .background(KiroColors.Accent)
-                        .clickable(enabled = customInput.isNotBlank()) { onSelect(customInput.trim()) }
+                        .clickable(enabled = customInput.isNotBlank()) {
+                            onSelect(customSlot, customInput.trim())
+                        }
                         .padding(horizontal = 16.dp),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -239,6 +237,60 @@ fun ModelPickerSheet(
             }
             Spacer(Modifier.height(24.dp))
         }
+    }
+}
+
+@Composable
+private fun ProviderSection(
+    group: ProviderModels,
+    selectedModel: String,
+    selectedSlot: Int,
+    onSelect: (Int, String) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(KiroColors.Surface2)
+                    .border(1.dp, KiroColors.Border, RoundedCornerShape(6.dp))
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+            ) {
+                Text(
+                    text = "#${group.slot}",
+                    color = KiroColors.Muted,
+                    fontSize = 10.sp,
+                    fontFamily = FontFamily.Monospace,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = group.name,
+                color = KiroColors.Foreground,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        group.result.fold(
+            onSuccess = { ids ->
+                if (ids.isEmpty()) {
+                    EmptyHint("Провайдер вернул пустой список моделей.")
+                } else {
+                    ids.forEach { id ->
+                        ModelRow(
+                            id = id,
+                            selected = id == selectedModel && group.slot == selectedSlot,
+                            onClick = { onSelect(group.slot, id) },
+                        )
+                        Spacer(Modifier.height(6.dp))
+                    }
+                }
+            },
+            onFailure = { err ->
+                ErrorHint(text = err.message ?: err::class.java.simpleName)
+            },
+        )
     }
 }
 
@@ -291,7 +343,7 @@ private fun EmptyHint(text: String) {
             .clip(RoundedCornerShape(10.dp))
             .background(KiroColors.Surface2.copy(alpha = 0.5f))
             .border(1.dp, KiroColors.Border, RoundedCornerShape(10.dp))
-            .padding(horizontal = 12.dp, vertical = 12.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Text(text = text, color = KiroColors.Muted, fontSize = 12.sp)
     }

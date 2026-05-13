@@ -19,6 +19,22 @@ class Settings(context: Context) {
                 putBoolean(KEY_MIGRATED_MAX_STEPS_V4, true)
             }
         }
+        // Migrate the legacy single-provider settings (`api_key`, `base_url`) into the new
+        // provider-1 slot so that users upgrading from an earlier build don't lose their
+        // already-typed Groq config.
+        if (!prefs.getBoolean(KEY_MIGRATED_PROVIDERS_V1, false)) {
+            val legacyKey = prefs.getString(KEY_API, "") ?: ""
+            val legacyUrl = prefs.getString(KEY_BASE_URL, "") ?: ""
+            prefs.edit {
+                if (legacyKey.isNotBlank() && (prefs.getString(KEY_PROVIDER1_API, "") ?: "").isBlank()) {
+                    putString(KEY_PROVIDER1_API, legacyKey)
+                }
+                if (legacyUrl.isNotBlank() && (prefs.getString(KEY_PROVIDER1_BASE_URL, "") ?: "").isBlank()) {
+                    putString(KEY_PROVIDER1_BASE_URL, legacyUrl)
+                }
+                putBoolean(KEY_MIGRATED_PROVIDERS_V1, true)
+            }
+        }
         // One-shot migration: previous builds defaulted reasoning_effort to "low" and
         // unconditionally sent it on every chat call. Most non-OpenAI models reject this
         // with HTTP 400, so we now ship with "" by default. Existing installs are migrated
@@ -32,13 +48,56 @@ class Settings(context: Context) {
         }
     }
 
+    // -- Two-provider model -------------------------------------------------------------------
+    //
+    // The app supports two simultaneously configured OpenAI-compatible providers ("Groq" and
+    // "Kiro AI" by default). The legacy `apiKey` / `baseUrl` properties below proxy to whichever
+    // provider is currently active, so all existing call-sites (Agent, LlmClient, STT) keep
+    // working without touching them.
+
+    var activeProvider: Int
+        get() = prefs.getInt(KEY_ACTIVE_PROVIDER, 1).coerceIn(1, 2)
+        set(value) = prefs.edit { putInt(KEY_ACTIVE_PROVIDER, value.coerceIn(1, 2)) }
+
+    var provider1Name: String
+        get() = prefs.getString(KEY_PROVIDER1_NAME, DEFAULT_PROVIDER1_NAME) ?: DEFAULT_PROVIDER1_NAME
+        set(value) = prefs.edit { putString(KEY_PROVIDER1_NAME, value) }
+
+    var provider1BaseUrl: String
+        get() = prefs.getString(KEY_PROVIDER1_BASE_URL, DEFAULT_PROVIDER1_BASE_URL)
+            ?: DEFAULT_PROVIDER1_BASE_URL
+        set(value) = prefs.edit { putString(KEY_PROVIDER1_BASE_URL, value) }
+
+    var provider1ApiKey: String
+        get() = prefs.getString(KEY_PROVIDER1_API, "") ?: ""
+        set(value) = prefs.edit { putString(KEY_PROVIDER1_API, value) }
+
+    var provider2Name: String
+        get() = prefs.getString(KEY_PROVIDER2_NAME, DEFAULT_PROVIDER2_NAME) ?: DEFAULT_PROVIDER2_NAME
+        set(value) = prefs.edit { putString(KEY_PROVIDER2_NAME, value) }
+
+    var provider2BaseUrl: String
+        get() = prefs.getString(KEY_PROVIDER2_BASE_URL, DEFAULT_PROVIDER2_BASE_URL)
+            ?: DEFAULT_PROVIDER2_BASE_URL
+        set(value) = prefs.edit { putString(KEY_PROVIDER2_BASE_URL, value) }
+
+    var provider2ApiKey: String
+        get() = prefs.getString(KEY_PROVIDER2_API, "") ?: ""
+        set(value) = prefs.edit { putString(KEY_PROVIDER2_API, value) }
+
+    // ---- Legacy proxy properties (read from the active provider) --------------------------------
+
     var apiKey: String
-        get() = prefs.getString(KEY_API, "") ?: ""
-        set(value) = prefs.edit { putString(KEY_API, value) }
+        get() = if (activeProvider == 1) provider1ApiKey else provider2ApiKey
+        set(value) {
+            if (activeProvider == 1) provider1ApiKey = value else provider2ApiKey = value
+        }
 
     var baseUrl: String
-        get() = prefs.getString(KEY_BASE_URL, DEFAULT_BASE_URL) ?: DEFAULT_BASE_URL
-        set(value) = prefs.edit { putString(KEY_BASE_URL, value) }
+        get() = if (activeProvider == 1) provider1BaseUrl else provider2BaseUrl
+        set(value) {
+            if (activeProvider == 1) provider1BaseUrl = value else provider2BaseUrl = value
+        }
 
     var model: String
         get() = prefs.getString(KEY_MODEL, DEFAULT_MODEL) ?: DEFAULT_MODEL
@@ -234,9 +293,14 @@ class Settings(context: Context) {
 
     companion object {
         const val PREFS_NAME = "agent_prefs"
-        // Empty by design — user enters their own endpoint. Default Groq URL was confusing
-        // for a Kiro-branded app ("why does it say Kiro but ping Groq?").
-        const val DEFAULT_BASE_URL = ""
+        // Two-provider defaults: Groq comes preconfigured because we know its URL;
+        // Kiro AI is left empty because Amazon Kiro doesn't expose a stable public HTTP
+        // endpoint — user pastes their own when they have it.
+        const val DEFAULT_PROVIDER1_NAME = "Groq"
+        const val DEFAULT_PROVIDER1_BASE_URL = "https://api.groq.com/openai/v1"
+        const val DEFAULT_PROVIDER2_NAME = "Kiro AI"
+        const val DEFAULT_PROVIDER2_BASE_URL = ""
+        const val DEFAULT_BASE_URL = DEFAULT_PROVIDER1_BASE_URL
         const val DEFAULT_MODEL = "auto"
         // Agent runs unbounded — the model decides when it's done. Kept as a high cap to
         // protect against truly broken loops, but the UI no longer surfaces this knob.
@@ -280,8 +344,19 @@ class Settings(context: Context) {
         const val DEFAULT_WAIT_FOR_MESSAGES = true
         const val DEFAULT_RECORD_USER_ACTIONS = true
 
+        // Legacy SharedPreferences keys — still read on first migration only.
+        @Suppress("unused")
         private const val KEY_API = "api_key"
+        @Suppress("unused")
         private const val KEY_BASE_URL = "base_url"
+        private const val KEY_ACTIVE_PROVIDER = "active_provider"
+        private const val KEY_PROVIDER1_NAME = "provider1_name"
+        private const val KEY_PROVIDER1_BASE_URL = "provider1_base_url"
+        private const val KEY_PROVIDER1_API = "provider1_api_key"
+        private const val KEY_PROVIDER2_NAME = "provider2_name"
+        private const val KEY_PROVIDER2_BASE_URL = "provider2_base_url"
+        private const val KEY_PROVIDER2_API = "provider2_api_key"
+        private const val KEY_MIGRATED_PROVIDERS_V1 = "migrated_providers_v1"
         private const val KEY_MODEL = "model"
         private const val KEY_MAX_STEPS = "max_steps"
         private const val KEY_MIGRATED_MAX_STEPS_V4 = "migrated_max_steps_v4"

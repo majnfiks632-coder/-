@@ -22,8 +22,11 @@ import com.aiagent.android.overlay.OverlayService
 import com.aiagent.android.service.AgentAccessibilityService
 import com.aiagent.android.service.ScreenCaptureService
 import com.aiagent.android.service.ScreenRecorderService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -68,8 +71,13 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 model = savedModel,
                 usage = savedUsage,
                 quotaCap = storage.loadQuotaCap(),
-                apiKey = settings.apiKey,
-                baseUrl = settings.baseUrl,
+                activeProvider = settings.activeProvider,
+                provider1Name = settings.provider1Name,
+                provider1BaseUrl = settings.provider1BaseUrl,
+                provider1ApiKey = settings.provider1ApiKey,
+                provider2Name = settings.provider2Name,
+                provider2BaseUrl = settings.provider2BaseUrl,
+                provider2ApiKey = settings.provider2ApiKey,
                 temperature = settings.temperature,
                 maxTokens = settings.maxTokens,
                 systemPrompt = settings.systemPrompt,
@@ -277,23 +285,61 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     // -----------------------------------------------------------------------------------------
 
     /**
-     * Fetches the model list from the configured OpenAI-compatible endpoint.
-     * Surfaces network/auth failures back to the picker as a `Result.failure`
-     * so the UI can render a non-fatal error card and let the user retry.
+     * Fetches the model list from BOTH configured providers in parallel. Returns one
+     * [ProviderModels] entry per provider — each carries either a success list or the
+     * failure that caused it (which the picker renders as an inline error). A provider
+     * with a blank Base URL is reported as a soft failure ("Base URL пустой") rather
+     * than being silently skipped, so the user sees that nothing was queried for it.
      */
-    suspend fun loadModels(): Result<List<String>> {
-        val baseUrl = settings.baseUrl.trim()
-        if (baseUrl.isBlank()) {
-            return Result.failure(IllegalStateException("Base URL пустой — вставь его в настройках."))
+    suspend fun loadModels(): List<ProviderModels> = coroutineScope {
+        val s = _state.value
+        val slots = listOf(
+            ProviderSlot(1, s.provider1Name, s.provider1BaseUrl, s.provider1ApiKey),
+            ProviderSlot(2, s.provider2Name, s.provider2BaseUrl, s.provider2ApiKey),
+        )
+        slots.map { slot ->
+            async(Dispatchers.IO) { fetchProviderModels(slot) }
+        }.map { it.await() }
+    }
+
+    private suspend fun fetchProviderModels(slot: ProviderSlot): ProviderModels {
+        if (slot.baseUrl.isBlank()) {
+            return ProviderModels(
+                slot = slot.index,
+                name = slot.name,
+                result = Result.failure(IllegalStateException("Base URL пустой")),
+            )
         }
-        val client = LlmClient(baseUrl = baseUrl, apiKey = settings.apiKey)
+        val client = LlmClient(baseUrl = slot.baseUrl, apiKey = slot.apiKey)
         return try {
-            Result.success(client.listModels())
+            ProviderModels(
+                slot = slot.index,
+                name = slot.name,
+                result = Result.success(client.listModels()),
+            )
         } catch (t: Throwable) {
-            Result.failure(t)
+            ProviderModels(
+                slot = slot.index,
+                name = slot.name,
+                result = Result.failure(t),
+            )
         } finally {
             client.close()
         }
+    }
+
+    private data class ProviderSlot(
+        val index: Int,
+        val name: String,
+        val baseUrl: String,
+        val apiKey: String,
+    )
+
+    /** Picks a model and atomically flips the active provider so subsequent
+     *  chat / STT calls go to the right endpoint. */
+    fun selectModel(slot: Int, id: String) {
+        setActiveProvider(slot)
+        setModel(id)
     }
 
     fun setModel(id: String) {
@@ -306,8 +352,35 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun setQuotaPanelOpen(open: Boolean) { _state.update { it.copy(quotaPanelOpen = open) } }
     fun setSettingsOpen(open: Boolean) { _state.update { it.copy(settingsOpen = open) } }
 
-    fun updateApiKey(v: String) { settings.apiKey = v; _state.update { it.copy(apiKey = v) } }
-    fun updateBaseUrl(v: String) { settings.baseUrl = v; _state.update { it.copy(baseUrl = v) } }
+    fun updateProvider1Name(v: String) {
+        settings.provider1Name = v
+        _state.update { it.copy(provider1Name = v) }
+    }
+    fun updateProvider1BaseUrl(v: String) {
+        settings.provider1BaseUrl = v
+        _state.update { it.copy(provider1BaseUrl = v) }
+    }
+    fun updateProvider1ApiKey(v: String) {
+        settings.provider1ApiKey = v
+        _state.update { it.copy(provider1ApiKey = v) }
+    }
+    fun updateProvider2Name(v: String) {
+        settings.provider2Name = v
+        _state.update { it.copy(provider2Name = v) }
+    }
+    fun updateProvider2BaseUrl(v: String) {
+        settings.provider2BaseUrl = v
+        _state.update { it.copy(provider2BaseUrl = v) }
+    }
+    fun updateProvider2ApiKey(v: String) {
+        settings.provider2ApiKey = v
+        _state.update { it.copy(provider2ApiKey = v) }
+    }
+    fun setActiveProvider(slot: Int) {
+        val clamped = slot.coerceIn(1, 2)
+        settings.activeProvider = clamped
+        _state.update { it.copy(activeProvider = clamped) }
+    }
     fun updateTemperature(v: Float) { settings.temperature = v; _state.update { it.copy(temperature = v) } }
     fun updateMaxTokens(v: Int) { settings.maxTokens = v; _state.update { it.copy(maxTokens = v) } }
     fun updateSystemPrompt(v: String) { settings.systemPrompt = v; _state.update { it.copy(systemPrompt = v) } }

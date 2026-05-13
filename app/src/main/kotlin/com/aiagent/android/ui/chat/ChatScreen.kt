@@ -117,10 +117,10 @@ fun ChatScreen(
 
     if (state.modelPickerOpen) {
         ModelPickerSheet(
-            selected = state.model,
-            baseUrlConfigured = state.baseUrl.isNotBlank(),
+            selectedModel = state.model,
+            selectedSlot = state.activeProvider,
             loadModels = { viewModel.loadModels() },
-            onSelect = { viewModel.setModel(it) },
+            onSelect = { slot, id -> viewModel.selectModel(slot, id) },
             onDismiss = { viewModel.setModelPickerOpen(false) },
         )
     }
@@ -137,8 +137,13 @@ fun ChatScreen(
         SettingsSheet(
             state = state,
             onDismiss = { viewModel.setSettingsOpen(false) },
-            onApiKey = viewModel::updateApiKey,
-            onBaseUrl = viewModel::updateBaseUrl,
+            onProvider1Name = viewModel::updateProvider1Name,
+            onProvider1BaseUrl = viewModel::updateProvider1BaseUrl,
+            onProvider1ApiKey = viewModel::updateProvider1ApiKey,
+            onProvider2Name = viewModel::updateProvider2Name,
+            onProvider2BaseUrl = viewModel::updateProvider2BaseUrl,
+            onProvider2ApiKey = viewModel::updateProvider2ApiKey,
+            onActiveProvider = viewModel::setActiveProvider,
             onTemperature = viewModel::updateTemperature,
             onMaxTokens = viewModel::updateMaxTokens,
             onSystemPrompt = viewModel::updateSystemPrompt,
