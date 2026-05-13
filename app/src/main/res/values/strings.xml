@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Kiro Agent</string>
+    <string name="accessibility_service_label">Kiro Agent Accessibility</string>
+    <string name="accessibility_service_description">Allows Kiro Agent to read screen content and perform actions on your behalf. Only enable if you trust this app and the configured AI provider.</string>
+</resources>
