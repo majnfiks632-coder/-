@@ -4,7 +4,9 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main ]
+    # Run on all PRs regardless of base branch so stacked PRs
+    # (PR-2 → PR-1 → main, etc.) also get verified.
+    branches: [ '**' ]
 
 jobs:
   build:
