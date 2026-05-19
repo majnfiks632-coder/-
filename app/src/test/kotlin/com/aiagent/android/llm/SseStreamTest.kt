@@ -30,7 +30,7 @@ class SseStreamTest {
         val deltas = mutableListOf<String>()
         val client = mkClient()
         try {
-            val resp = client.consumeSseChunks(streamFrom(body)) { deltas.add(it) }
+            val resp = client.consumeSseChunks(streamFrom(body), onDelta = { deltas.add(it) })
             assertEquals(listOf("Hello", ", world"), deltas)
             val msg = resp.choices.single().message
             assertEquals("Hello, world", msg.contentText)
@@ -52,7 +52,7 @@ class SseStreamTest {
         val deltas = mutableListOf<String>()
         val client = mkClient()
         try {
-            val resp = client.consumeSseChunks(streamFrom(body)) { deltas.add(it) }
+            val resp = client.consumeSseChunks(streamFrom(body), onDelta = { deltas.add(it) })
             assertEquals(listOf("a", "b"), deltas)
             assertEquals("ab", resp.choices.single().message.contentText)
         } finally {
@@ -72,7 +72,7 @@ class SseStreamTest {
             )
         val client = mkClient()
         try {
-            val resp = client.consumeSseChunks(streamFrom(body)) { /* no content deltas */ }
+            val resp = client.consumeSseChunks(streamFrom(body), onDelta = { /* no content deltas */ })
             val tc = resp.choices.single().message.toolCalls!!.single()
             assertEquals("call_1", tc.id)
             assertEquals("send_message", tc.function.name)
@@ -92,7 +92,7 @@ class SseStreamTest {
         val deltas = mutableListOf<String>()
         val client = mkClient()
         try {
-            client.consumeSseChunks(streamFrom(body)) { deltas.add(it) }
+            client.consumeSseChunks(streamFrom(body), onDelta = { deltas.add(it) })
             assertEquals(listOf("x"), deltas)
             assertTrue("y" !in deltas)
         } finally {
