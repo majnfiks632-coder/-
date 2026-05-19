@@ -108,5 +108,9 @@ dependencies {
     // Storage Access Framework helpers for user-granted folder access.
     implementation("androidx.documentfile:documentfile:1.0.1")
 
+    // Encrypted SharedPreferences for API key storage (Android Keystore-backed).
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
 }
