@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Paths the in-app FileProvider is allowed to expose to other apps when the agent
+  uses the share_file tool. We deliberately cover both the app-private dirs (always
+  safe) and shared external locations (Downloads / Pictures / etc.) because the
+  agent's file_tools can drop files anywhere the user grants SAF / all-files access.
+
+  Authority is `${applicationId}.fileprovider` — see AndroidManifest.xml.
+-->
+<paths>
+    <files-path name="files" path="." />
+    <cache-path name="cache" path="." />
+    <external-files-path name="ext_files" path="." />
+    <external-cache-path name="ext_cache" path="." />
+    <external-path name="external" path="." />
+    <root-path name="root" path="." />
+</paths>

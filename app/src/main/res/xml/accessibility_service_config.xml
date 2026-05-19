@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The agent is *pull-based* for the screen tree (read on demand via captureScreenState()),
+    but it ALSO subscribes to user-input events so it can remember what the user did between
+    its own replies — the "память действий" feature. Events are filtered in
+    AgentAccessibilityService: events fired while the agent is dispatching its own gestures
+    are suppressed via UserActionLog.isSuppressed().
+
+    feedbackGeneric instead of feedbackVisual: on Realme/OPPO ColorOS, feedbackVisual is
+    sometimes interpreted as a screen-reader-class service, which auto-routes notifications
+    through the "silent for assistive apps" channel — exactly the bug the user reported
+    (every notification ends up in the "Тихие" section the moment the service is bound).
+    feedbackGeneric is the neutral fallback Google recommends for non-screen-reader services
+    and does NOT trigger that classification.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeViewClicked|typeViewLongClicked|typeViewScrolled|typeViewTextChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault|flagRetrieveInteractiveWindows|flagReportViewIds"
+    android:canPerformGestures="true"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/accessibility_service_description"
+    android:notificationTimeout="100" />

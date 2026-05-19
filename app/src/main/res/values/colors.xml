@@ -1,0 +1,14 @@
+<resources>
+    <!-- Claude-Code style dark-orange palette: warm near-black background + burnt-orange accents. -->
+    <color name="kiro_background">#0E0A06</color>
+    <color name="kiro_surface">#18120D</color>
+    <color name="kiro_surface_2">#221913</color>
+    <color name="kiro_border">#3A2A1E</color>
+    <color name="kiro_accent">#CC785C</color>
+    <color name="kiro_accent_2">#FFB066</color>
+    <color name="kiro_muted">#A08775</color>
+    <color name="kiro_foreground">#F1E6D6</color>
+
+    <!-- Adaptive launcher icon background matches the new warm dark backdrop. -->
+    <color name="ic_launcher_background">#0E0A06</color>
+</resources>

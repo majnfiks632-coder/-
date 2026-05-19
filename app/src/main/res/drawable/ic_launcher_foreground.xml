@@ -1,0 +1,49 @@
+<!--
+    Stylised "K" mark for Kiro Agent. The adaptive-icon background is solid
+    Kiro slate (#0B0D12); the glyph itself uses the Kiro accent gradient.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Vertical bar of the K -->
+    <path
+        android:pathData="M36,28 L46,28 L46,80 L36,80 Z">
+        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="36" android:startY="28"
+                android:endX="46" android:endY="80"
+                android:startColor="#7C5CFF"
+                android:endColor="#5CB4FF" />
+        </aapt:attr>
+    </path>
+
+    <!-- Upper diagonal of the K -->
+    <path
+        android:pathData="M48,52 L62,28 L74,28 L58,54 Z">
+        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="48" android:startY="28"
+                android:endX="74" android:endY="54"
+                android:startColor="#7C5CFF"
+                android:endColor="#5CB4FF" />
+        </aapt:attr>
+    </path>
+
+    <!-- Lower diagonal of the K -->
+    <path
+        android:pathData="M58,54 L74,80 L62,80 L48,56 Z">
+        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="48" android:startY="54"
+                android:endX="74" android:endY="80"
+                android:startColor="#5CB4FF"
+                android:endColor="#7C5CFF" />
+        </aapt:attr>
+    </path>
+</vector>
